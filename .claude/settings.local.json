@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(rm:*)",
+      "Bash(cp:*)",
+      "Bash(python3:*)",
+      "Bash(tree -L 4 /Users/yeheng/workspaces/research/template/.claude)"
+    ]
+  },
+  "research": {
+    "default_output_dir": "RESEARCH",
+    "max_agents": 8,
+    "default_quality_threshold": 8,
+    "citation_style": "inline-with-url"
+  }
+}
