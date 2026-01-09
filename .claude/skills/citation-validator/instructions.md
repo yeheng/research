@@ -245,15 +245,20 @@ Unsourced Claims:
 
 **Before manual verification, run automated checks:**
 
-**Phase 1: URL Accessibility Check**
+**Phase 1: URL Accessibility Check with Dead Link Defense**
 
 ```markdown
 1. Extract all URLs/DOIs from citations
 2. Use WebFetch in parallel to test accessibility
-3. Flag broken links (404, timeout, SSL errors)
+3. For broken links (404, timeout, SSL errors):
+   a. Attempt Wayback Machine recovery:
+      - Check: https://archive.org/wayback/available?url=[original_url]
+      - If snapshot exists, replace with: https://web.archive.org/web/[timestamp]/[original_url]
+   b. If no archive found, flag for manual review
 4. Generate accessibility report:
    - ✓ Accessible: [count]
-   - ✗ Broken: [count] - [list URLs]
+   - 🔄 Recovered (Wayback): [count] - [list URLs]
+   - ✗ Broken (No Archive): [count] - [list URLs]
    - ⚠ Redirected: [count] - [list URLs]
 ```
 

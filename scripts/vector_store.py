@@ -115,6 +115,52 @@ class SimpleVectorStore:
         max_freq = max(tf.values()) if tf else 1
         return {k: v / max_freq for k, v in tf.items()}
 
+    def _compute_simple_embedding(self, text: str) -> List[float]:
+        """
+        Compute a simple embedding using character n-grams.
+        This is a lightweight fallback when no embedding API is available.
+        """
+        if not HAS_NUMPY:
+            return []
+
+        import numpy as np
+        # Use character trigrams for basic semantic similarity
+        trigrams = set()
+        text_lower = text.lower()
+        for i in range(len(text_lower) - 2):
+            trigrams.add(text_lower[i:i+3])
+
+        # Create a simple 128-dim vector
+        vec = np.zeros(128)
+        for tg in trigrams:
+            hash_val = hash(tg) % 128
+            vec[hash_val] += 1
+
+        # Normalize
+        norm = np.linalg.norm(vec)
+        if norm > 0:
+            vec = vec / norm
+
+        return vec.tolist()
+
+    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+        """Compute cosine similarity between two vectors."""
+        if not HAS_NUMPY or not vec1 or not vec2:
+            return 0.0
+
+        import numpy as np
+        v1 = np.array(vec1)
+        v2 = np.array(vec2)
+
+        dot_product = np.dot(v1, v2)
+        norm1 = np.linalg.norm(v1)
+        norm2 = np.linalg.norm(v2)
+
+        if norm1 == 0 or norm2 == 0:
+            return 0.0
+
+        return float(dot_product / (norm1 * norm2))
+
     def _score_relevance(self, query_tokens: List[str], chunk_tokens: List[str]) -> float:
         """Score relevance between query and chunk using TF overlap."""
         query_set = set(query_tokens)
@@ -197,19 +243,39 @@ class SimpleVectorStore:
         self._save()
         return chunks_added
 
-    def query(self, query: str, top_k: int = 5) -> List[Tuple[DocumentChunk, float]]:
+    def query(self, query: str, top_k: int = 5, use_embeddings: bool = True) -> List[Tuple[DocumentChunk, float]]:
         """
-        Query the vector store.
+        Query the vector store with optional semantic embeddings.
 
         Args:
             query: Search query
             top_k: Number of results to return
+            use_embeddings: Use semantic embeddings if available (default: True)
 
         Returns:
             List of (chunk, score) tuples
         """
         query_tokens = self._tokenize(query)
 
+        # Try semantic search first if embeddings available
+        if use_embeddings and HAS_NUMPY:
+            query_embedding = self._compute_simple_embedding(query)
+            if query_embedding:
+                results = []
+                for chunk in self.chunks:
+                    if chunk.embedding:
+                        score = self._cosine_similarity(query_embedding, chunk.embedding)
+                    else:
+                        # Fallback to TF-IDF for chunks without embeddings
+                        chunk_tokens = self._tokenize(chunk.content)
+                        score = self._score_relevance(query_tokens, chunk_tokens)
+                    if score > 0:
+                        results.append((chunk, score))
+
+                results.sort(key=lambda x: x[1], reverse=True)
+                return results[:top_k]
+
+        # Fallback to TF-IDF scoring
         results = []
         for chunk in self.chunks:
             chunk_tokens = self._tokenize(chunk.content)
@@ -217,7 +283,6 @@ class SimpleVectorStore:
             if score > 0:
                 results.append((chunk, score))
 
-        # Sort by score descending
         results.sort(key=lambda x: x[1], reverse=True)
         return results[:top_k]
 

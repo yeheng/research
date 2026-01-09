@@ -28,9 +28,62 @@ try:
 except ImportError:
     HAS_BS4 = False
 
+try:
+    import html2text
+    HAS_HTML2TEXT = True
+except ImportError:
+    HAS_HTML2TEXT = False
+
+
+def convert_table_to_markdown(table_element) -> str:
+    """Convert an HTML table to Markdown format, preserving structure."""
+    if not HAS_BS4:
+        return ""
+
+    rows = table_element.find_all('tr')
+    if not rows:
+        return ""
+
+    markdown_rows = []
+    header_processed = False
+
+    for row in rows:
+        cells = row.find_all(['th', 'td'])
+        if not cells:
+            continue
+
+        cell_texts = []
+        for cell in cells:
+            text = cell.get_text(strip=True).replace('|', '\\|')
+            text = ' '.join(text.split())
+            cell_texts.append(text)
+
+        row_text = '| ' + ' | '.join(cell_texts) + ' |'
+        markdown_rows.append(row_text)
+
+        if row.find('th') or not header_processed:
+            separator = '| ' + ' | '.join(['---'] * len(cells)) + ' |'
+            markdown_rows.append(separator)
+            header_processed = True
+
+    return '\n'.join(markdown_rows)
+
+
+def extract_tables(soup) -> list:
+    """Extract all tables from HTML and convert to Markdown."""
+    tables = []
+    for table in soup.find_all('table'):
+        md_table = convert_table_to_markdown(table)
+        if md_table and len(md_table) > 20:
+            tables.append(md_table)
+        table.extract()
+    return tables
+
 
 def clean_html(raw_html: str) -> str:
-    """Remove scripts, styles, navigation, keeping only core text content."""
+    """Remove scripts, styles, navigation, keeping only core text content.
+    Preserves tables by converting them to Markdown format.
+    """
     if not HAS_BS4:
         # Fallback: basic regex cleaning if BeautifulSoup not available
         text = re.sub(r'<script[^>]*>.*?</script>', '', raw_html, flags=re.DOTALL | re.IGNORECASE)
@@ -44,6 +97,9 @@ def clean_html(raw_html: str) -> str:
         return text.strip()
 
     soup = BeautifulSoup(raw_html, 'html.parser')
+
+    # Extract tables FIRST before removing other elements
+    extracted_tables = extract_tables(soup)
 
     # Remove interference elements
     tags_to_remove = [
@@ -70,8 +126,20 @@ def clean_html(raw_html: str) -> str:
         for element in soup.find_all(id=re.compile(pattern, re.I)):
             element.extract()
 
-    # Extract text with newlines
-    text = soup.get_text(separator='\n')
+    # Use html2text if available for better Markdown conversion
+    if HAS_HTML2TEXT:
+        h = html2text.HTML2Text()
+        h.ignore_links = False
+        h.ignore_images = True
+        h.ignore_emphasis = False
+        h.body_width = 0  # Don't wrap lines
+        h.unicode_snob = True
+        h.skip_internal_links = True
+        h.inline_links = True
+        text = h.handle(str(soup))
+    else:
+        # Fallback: Extract text with newlines
+        text = soup.get_text(separator='\n')
 
     # Clean whitespace
     lines = (line.strip() for line in text.splitlines())
@@ -80,6 +148,11 @@ def clean_html(raw_html: str) -> str:
 
     # Remove excessive newlines
     text = re.sub(r'\n{3,}', '\n\n', text)
+
+    # Append extracted tables at the end with section header
+    if extracted_tables:
+        text += "\n\n## Extracted Data Tables\n\n"
+        text += "\n\n---\n\n".join(extracted_tables)
 
     return text
 

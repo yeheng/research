@@ -322,7 +322,12 @@ CRITICAL WORKFLOW (MUST FOLLOW):
    - Register URL immediately
    - Run preprocess_document.py
    - Read from processed file
-5. Use mcp__zai-mcp-server__analyze_image if you encounter relevant charts/graphs
+5. RECURSIVE REFERENCE HOPPING (for A-rated sources):
+   - Extract bibliography/references from high-quality sources
+   - Add promising references to priority queue
+   - Follow citation chains to original sources
+   - Stop after 2 levels deep to avoid infinite loops
+6. Use mcp__zai-mcp-server__analyze_image if you encounter relevant charts/graphs
 
 Focus on finding:
 - Recent information (prioritize sources from [timeframe])
@@ -394,17 +399,116 @@ For each claim, provide:
 3. Collect results using TaskOutput when agents complete
 4. Track agent progress with TodoWrite
 
+### Phase 3.5: Devil's Advocate (Red Team) - MANDATORY
+
+**Purpose**: Before synthesizing findings, deploy an adversarial "Red Team" agent to actively search for counter-evidence, limitations, and biases. This prevents "echo chamber" effects when all search results share the same bias.
+
+**Why This Matters**:
+- Search results may be biased (SEO-optimized marketing, confirmation bias)
+- High-profile claims need rigorous scrutiny
+- Scientific findings require replication awareness
+- Prevents overconfidence in preliminary results
+
+**Red Team Agent Template**:
+
+```
+You are a specialized **Devil's Advocate Agent** (Red Team).
+
+**Your SOLE Mission**: Find evidence that **DISPROVES, CONTRADICTS, or LIMITS** the following claims from the research:
+
+**Claims to Challenge**:
+[List 3-5 key claims from Phase 3 agents]
+
+**Your Approach**:
+1. For each claim, search for:
+   - "criticism of [claim/topic]"
+   - "[topic] failed replication"
+   - "[topic] limitations problems"
+   - "[topic] debunked controversy"
+   - "why [claim] is wrong"
+
+2. Look for:
+   - Failed replication studies
+   - Methodological critiques
+   - Conflicts of interest in original sources
+   - Contradicting data from reputable sources
+   - Edge cases where the claim doesn't hold
+
+3. Rate the strength of counter-evidence:
+   - ⚠️ Strong Counter-Evidence: Multiple high-quality sources contradict the claim
+   - 🔸 Moderate Concerns: Some limitations or exceptions exist
+   - ✓ Claim Robust: No significant counter-evidence found
+
+**Output Format**:
+| Original Claim | Counter-Evidence Found | Source Quality | Recommendation |
+|----------------|----------------------|----------------|----------------|
+| [Claim 1] | [Evidence or "None"] | [A-E] | Keep/Modify/Flag |
+
+**Time Budget**: 10-15 minutes focused adversarial search
+**Mindset**: Be skeptical. Assume claims are wrong until proven robust.
+```
+
+**Decision Logic After Red Team**:
+
+```markdown
+If Strong Counter-Evidence (⚠️) found:
+  → MANDATORY: Add "Controversies & Limitations" section to final report
+  → Trigger GoT Refine operation to incorporate counter-evidence
+  → Reduce confidence rating for affected claims
+
+If Moderate Concerns (🔸) found:
+  → Add caveats to relevant sections
+  → Note limitations in methodology.md
+
+If All Claims Robust (✓):
+  → Proceed with higher confidence
+  → Note in report: "Red team validation passed"
+```
+
+**Integration with GoT**:
+
+When using GoT Controller:
+1. After Generate operations complete, ALWAYS run Red Team Agent
+2. If Red Team finds strong counter-evidence, trigger `Refine(1)` on affected nodes
+3. Score adjustment: Nodes with unaddressed counter-evidence get -1.0 to -2.0 penalty
+
+**Red Team Findings Registry**:
+
+Save red team findings to `research_notes/red_team_findings.json`:
+
+```json
+{
+  "research_topic": "[topic]",
+  "red_team_date": "[ISO date]",
+  "claims_challenged": 5,
+  "counter_evidence_found": 2,
+  "findings": [
+    {
+      "original_claim": "AI market will grow 40% CAGR",
+      "counter_evidence": "Some analysts predict slowdown to 25% due to regulation",
+      "sources": ["Gartner 2024 revision", "EU AI Act impact analysis"],
+      "severity": "moderate",
+      "recommendation": "Add regulatory risk caveat"
+    }
+  ],
+  "overall_assessment": "Claims are generally robust with some caveats needed"
+}
+```
+
+---
+
 ### Phase 4: Source Triangulation
 
 Compare findings across multiple sources and validate claims.
 
 **Actions**:
 
-1. Compile findings from all agents
+1. Compile findings from all agents (including Red Team)
 2. Identify overlapping conclusions (high confidence)
 3. Note contradictions between sources
 4. Assess source credibility using A-E rating system
 5. Resolve inconsistencies by finding authoritative sources
+6. **NEW**: Incorporate Red Team findings into triangulation
 
 **Source Quality Ratings**:
 

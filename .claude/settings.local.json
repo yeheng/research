@@ -9,7 +9,14 @@
       "Bash(rm:*)",
       "Bash(cp:*)",
       "Bash(python3:*)",
-      "Bash(tree -L 4 /Users/yeheng/workspaces/research/template/.claude)"
+      "Bash(tree -L 4 /Users/yeheng/workspaces/research/template/.claude)",
+      "Skill(question-refiner)",
+      "mcp__web-search-prime__webSearchPrime",
+      "WebSearch",
+      "mcp__web-reader__webReader",
+      "Skill(deep-research)",
+      "Skill(research-executor)",
+      "Bash(find:*)"
     ]
   },
   "research": {

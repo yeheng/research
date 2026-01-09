@@ -263,6 +263,37 @@ Score: 1.0/10
 - Example: KeepBestN(3) → Retain only top 3 scoring nodes
 ```
 
+### 6. Dynamic Budgeting & Circuit Breaking
+
+**Purpose**: Automatically adjust research depth based on information quality and prevent wasted effort on dead-end paths
+
+**CRITICAL OPTIMIZATION**: This prevents token waste on low-quality branches while allocating more resources to high-value discoveries.
+
+**Circuit Breaking Rules**:
+
+1. **Low Score Circuit Breaker**:
+   - If a node scores < 5.0, mark branch as "low quality"
+   - If 3 consecutive Generate operations from same branch produce scores < 5.0, **STOP** exploring that branch
+   - Prune all nodes in that branch to free resources
+
+2. **High Value Expansion**:
+   - If a node scores > 9.0 AND contains "Needs further investigation" marker, **ADD** 2 extra depth levels to that branch
+   - Allocate additional Generate operations to high-scoring paths
+
+**Implementation**:
+
+```markdown
+**Circuit Breaking Check** (run after each Score operation):
+- Check: Has this branch produced 3 consecutive low scores (< 5.0)?
+  - YES → Prune branch, log reason, reallocate budget
+  - NO → Continue
+
+**High Value Detection** (run after each Score operation):
+- Check: Score > 9.0 AND high research potential?
+  - YES → Increase depth budget by 2 levels
+  - NO → Continue with standard budget
+```
+
 ## GoT Research Execution Patterns
 
 ### Pattern 1: Breadth-First Exploration

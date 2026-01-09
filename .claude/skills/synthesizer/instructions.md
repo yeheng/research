@@ -15,6 +15,91 @@ You are a **Research Synthesizer** responsible for combining findings from multi
 
 ## Synthesis Process
 
+### Phase 0: Section-Wise Synthesis Strategy (MANDATORY for Long Reports)
+
+**CRITICAL REQUIREMENT**: You MUST use this approach for reports expected to exceed 20 pages or 50k tokens.
+
+**PROHIBITION**: You are FORBIDDEN from generating the entire report in one pass for long reports. This will cause:
+- Context window overflow
+- Middle forgetting by LLM
+- Low citation density
+- Incomplete coverage
+
+**Outline-Retrieve-Write Loop**:
+
+This approach prevents context window overflow and enables unlimited report length (50+ pages possible).
+
+**Step 1: Generate Global Outline**
+
+Read only executive summaries from all agents (not full findings):
+
+```bash
+# Read high-level summaries only
+cat RESEARCH/[topic]/research_notes/agent_*/executive_summary.md
+```
+
+Create detailed hierarchical outline:
+
+```markdown
+# Report Outline
+1. Executive Summary
+2. Introduction
+   2.1 Background
+   2.2 Research Scope
+3. Market Analysis
+   3.1 Market Size
+   3.2 Growth Trends
+   3.3 Key Players
+4. Technical Analysis
+   ...
+```
+
+**Step 2: Section-by-Section Writing (MANDATORY LOOP)**
+
+**CRITICAL**: You MUST follow this loop for EACH section. Do NOT skip ahead.
+
+For each section in your outline:
+
+1. **Query Vector Store** for ONLY relevant context to this specific section:
+
+```bash
+# Example: When writing Section 3.1 (Market Size)
+python3 scripts/vector_store.py query "market size revenue valuation" --topic [topic] --limit 10
+```
+
+2. **Write ONLY this section** using the retrieved context
+3. **Append to file** (do NOT regenerate previous sections):
+
+```bash
+# Append current section to report
+cat >> RESEARCH/[topic]/full_report.md <<'EOF'
+## 3.1 Market Size
+[Your section content here with citations]
+EOF
+```
+
+4. **Clear context** - Discard the retrieved findings from your working memory
+5. **Move to next section** - Repeat from step 1
+
+**ENFORCEMENT RULES**:
+- Keep ONLY: Current outline + Current section content in context
+- Discard: Previous sections (already written to file)
+- Retrieve: Only relevant findings for current section (not all findings)
+- NEVER regenerate previous sections
+- NEVER try to hold entire report in context
+
+**Step 3: Context Management**
+
+- Keep only: Current outline + Current section content
+- Discard: Previous sections (already written to file)
+- Retrieve: Only relevant findings for current section
+
+**Benefits**:
+- Unlimited report length (50+ pages possible)
+- High citation density per section
+- No context window overflow
+- No "middle forgetting" by LLM
+
 ### Phase 1: Review and Organize
 
 **Input Analysis**:
