@@ -1,0 +1,19 @@
+# This is a template directory structure for research projects.
+# Each research topic should follow this structure:
+#
+# RESEARCH/[topic_name]/
+# ├── README.md                    # Overview and navigation
+# ├── executive_summary.md         # 1-2 page key findings
+# ├── full_report.md               # Complete analysis
+# ├── data/
+# │   ├── raw/                     # Original downloaded files (not in LLM context)
+# │   ├── processed/               # Cleaned markdown files (for LLM context)
+# │   └── structured/              # JSON format metrics and data
+# ├── sources/
+# │   ├── bibliography.md          # Complete citations
+# │   └── source_quality_table.md  # A-E quality ratings
+# ├── research_notes/
+# │   └── agent_findings_summary.md
+# └── appendices/
+#     ├── methodology.md
+#     └── limitations.md

@@ -1,0 +1,75 @@
+# Research outputs (keep structure, ignore content)
+RESEARCH/*/
+!RESEARCH/.example/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Cache
+.cache/
+*.cache
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+
+# Local settings (keep template)
+.claude/settings.local.json
+
+# Vector store data
+*.faiss
+*.chroma
+chroma_db/
+
+# Large data files
+*.pdf
+*.zip
+*.tar.gz
+data/raw/*.html
+data/raw/*.pdf
+
+# Keep processed files but ignore if too large
+data/processed/*.html
+
+# Environment variables
+.env
+.env.local
+
+# OS files
+Thumbs.db
+Desktop.ini
