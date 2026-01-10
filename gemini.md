@@ -1,65 +1,123 @@
-这是一个非常完善的基于 Claude Code Skills 架构的 Deep Research 框架。它通过模拟 Graph of Thoughts (GoT) 和多智能体协作，已经达到了很高的完成度。
+这是一个非常完善且架构清晰的 Deep Research 框架。它成功地将复杂的思考过程解耦为模块化的 Skills，并利用 GoT (Graph of Thoughts) 来管理推理深度。
 
-经过仔细审视代码库和逻辑流，从**架构设计、成本/效率优化、研究质量、交互体验**四个维度，我发现了以下值得进一步优化的深层点：
+经过深度思考（DeepThink/UltraThink），虽然该框架在逻辑闭环上已经做得很好，但在**大规模并行下的稳定性**、**信息合成的颗粒度**、以及**长尾知识的挖掘**上，仍有显著的优化空间。
 
-### 1. 架构与状态管理优化 (Architecture & State)
+以下是针对现有代码库的 6 个关键优化点：
 
-当前架构过度依赖文件系统 (`.md` 文件) 作为“内存”和“通信总线”。虽然这符合 Claude Code 的无状态特性，但在处理大规模图操作时效率较低。
+### 1. 架构级优化：状态管理的原子性与事务化
 
-* **GoT 状态管理的结构化升级**：
-  * **现状**：`got-controller` 将图状态保存在 Markdown 表格中。随着节点增加，Context 消耗呈线性甚至指数增长，且 LLM 解析 Markdown 表格容易出错。
-  * **优化**：
-    * 改为维护一个轻量级的 `graph_state.json`。
-    * 在 `got-controller` 的 `SKILL.md` 中增加一个 `view-subgraph` 工具或逻辑，只让 LLM 读取当前关注的“局部子图” (Frontier Nodes)，而不是每次都读取整个图的历史。
-* **智能体间的“黑板”机制 (Shared Blackboard)**：
-  * **现状**：智能体并行运行，直到结束后才汇总。如果 Agent A 发现了关键的新术语（例如一个特定药物名），Agent B 在并行运行时无法得知，仍在用通用术语搜索。
-  * **优化**：创建一个 `RESEARCH/[topic]/shared_insights.md`。并行智能体在发现“高价值实体”或“阻断性反证”时，利用 `Write` 工具异步写入此文件。其他智能体定期（或在开始新子任务前）读取此文件，实现**异步信息同步**。
+**痛点：**
+目前的架构依赖 `json` 文件（`agent_status.json`, `got_graph_state.json`）来跨 Agent 同步状态。
+在 `research-executor` 启动 5-8 个并行 Agent 时，极易出现**竞态条件 (Race Conditions)**，导致状态文件损坏或覆盖，GoT 的节点状态可能丢失。
 
-### 2. 成本与上下文效率优化 (Cost & Context)
+**优化方案：引入轻量级 SQLite 替代 JSON**
+不要依赖文件系统的锁机制，改用 SQLite（Python 内置，零额外依赖）。
 
-Deep Research 最烧钱的地方在于 Web 内容的 Token 消耗和 Agent 的 Prompt 开销。
+* **实现方式**：
+    创建一个 `scripts/state_manager.py`，统一管理所有状态读写。
 
-* **Prompt 蒸馏 (Prompt Distillation)**：
-  * **现状**：`research-executor` 启动子 Agent 时，似乎传递了完整的上下文和极其冗长的 System Prompt。
-  * **优化**：为子 Agent 设计“精简版”指令。子 Agent 不需要知道什么是 GoT，也不需要知道完整的 7 阶段流程。它只需要知道：“搜索 X，验证 Y，格式化输出 Z”。这将显著减少 Input Token。
-* **强制性的 URL Manifest 检查**：
-  * **现状**：虽然有 `scripts/url_manifest.py`，但在 Agent 的 Prompt 模板中（`research-executor/instructions.md`），并没有强制要求 Agent 在 `WebFetch` 之前先检查 Manifest。
-  * **优化**：在 System Prompt 中硬性规定：*“Before fetching any URL, you MUST run `python3 scripts/url_manifest.py check <url>` to see if we already have it locally.”* 这能防止多个智能体重复抓取同一个维基百科或新闻页面。
-* **向量化检索增强 (RAG) 的深度集成**：
-  * **现状**：`synthesizer` 似乎主要依赖读取 `agent_findings_summary.md`。如果报告长达 50 页，Synthesis 阶段会撑爆 Context。
-  * **优化**：充分利用 `scripts/vector_store.py`。在 `research-executor` 阶段，Agent 抓取的内容处理后应自动 Index。在 `synthesizer` 阶段，不应一次性读取所有内容，而是基于大纲的每一节（Section）去 `query` 向量库。即：**Section-wise Synthesis (分节合成)**。
+    ```sql
+    CREATE TABLE nodes (
+        id TEXT PRIMARY KEY,
+        parent_id TEXT,
+        content TEXT,
+        score REAL,
+        status TEXT, -- 'pending', 'processing', 'complete'
+        meta JSON
+    );
+    CREATE TABLE agent_heartbeats (
+        agent_id TEXT PRIMARY KEY,
+        last_seen TIMESTAMP,
+        current_action TEXT
+    );
+    ```
 
-### 3. 研究质量与鲁棒性优化 (Quality & Robustness)
+* **收益**：
+    1. **并发安全**：SQLite 处理并发写入锁定。
+    2. **复杂查询**：Synthesizer 可以直接 SQL 查询：“找出所有 Score > 8.0 且关于‘市场规模’的节点”，而不需要加载整个 JSON 到内存。
 
-* **反向验证机制 (Adversarial Verification)**：
-  * **现状**：`citation-validator` 是事后诸葛亮。
-  * **优化**：引入一个 **"Devil's Advocate" (魔鬼代言人) Agent**。
-  * 在 GoT 的 `Aggregate` 阶段之前，强制运行一个 Critic 轮次。专门搜索“Evidence against [Claim]”或“[Claim] criticism”。目前的 Cross-Reference Agent 有点类似，但应更具攻击性，专门寻找反证，以避免“确认偏差”。
-* **死链与内容变动防御**：
-  * **现状**：引用检查只看格式和来源评级。
-  * **优化**：在最终生成报告前，运行一个脚本 `scripts/check_links.py`，对所有引用链接进行一次 `HEAD` 请求，确保没有 404。如果有，自动回退到 `Internet Archive` 的链接（如果之前有记录）。
+### 2. 深度推理优化：自动化的“引用追溯” (Recursive Citation Chasing)
 
-### 4. 动态规划与执行 (Dynamic Execution)
+**痛点：**
+目前的 `WebSearch` 只能触达“搜索引擎索引层”。真正的深度研究往往隐藏在高质量论文/报告的参考文献中（即 Deep Web）。目前的 `research-executor` 依赖 Agent 自主决定是否去查引用，这很不稳定。
 
-* **从“静态计划”转向“动态规划”**：
-  * **现状**：Phase 2 制定计划，Phase 3 执行。如果是探索性研究，Phase 2 很难定得准。
-  * **优化**：实施 **TOTE 模型 (Test-Operate-Test-Exit)**。
-  * 先发射一个“侦察兵 Agent”做 5 分钟的快速广度搜索，基于侦察结果生成更精准的 Keyword 和子主题，然后再制定 Phase 2 的详细计划。
-* **智能中断与恢复 (Resumability)**：
-  * **现状**：如果 Claude 在 Phase 5 崩溃或断网，似乎很难从断点无缝恢复，可能需要人工介入。
-  * **优化**：在 `RESEARCH/[topic]/` 下维护一个 `status.json`，记录 `current_phase` 和 `completed_agents`。`research-executor` 启动时先检查此文件。如果存在未完成的任务，询问用户是否“Resume Session”。
+**优化方案：增加 `scripts/citation_chaser.py` 工具**
+在 Agent 发现高质量（A级）来源时，自动触发此脚本。
 
-### 5. 具体代码/Prompt 细节修正
+* **逻辑**：
+    1. 输入一个 PDF/网页 URL。
+    2. 利用正则/NLP 提取其 Bibliography / References 列表。
+    3. 将这些标题与当前研究子主题进行相似度匹配。
+    4. 将匹配度高的标题**自动加入**待搜索队列（Frontier）。
+* **集成**：
+    在 `research-executor/instructions.md` 中增加一条规则：
+    > "When a Source is rated 'A', you MUST invoke `citation_chaser` on it to find primary sources."
 
-* **Search Query 多样性**：
-    在 `research-executor` 的 Agent 模板中，强制要求使用特定的搜索操作符。例如，要求 Agent 必须尝试 `site:gov` 或 `filetype:pdf` 的查询，而不仅仅是自然语言查询，以提高获取高质量（A/B 级）来源的概率。
-* **GoT 评分标准的量化**：
-    目前的评分（0-10）比较主观。建议在 Prompt 中提供具体的 **Few-Shot Examples**，例如：“这是一个 6 分的 Node（原因：单一来源），这是一个 9 分的 Node（原因：多源交叉验证 + 包含数据表格）”。
+### 3. 合成优化：基于大纲的流式写入 (Outline-Guided Streaming Synthesis)
 
-### 总结建议的实施路线图
+**痛点：**
+`synthesizer` 目前倾向于“读取所有发现 -> 生成报告”。
+当 `research_notes` 积累了 10 万 Token 时，即便使用了 Vector Store，LLM 在生成长文时仍会出现“中间遗忘”或“虎头蛇尾”。
 
-1. **Level 1 (Quick Fix)**: 修改 `research-executor` 的 Prompt，强制使用 `url_manifest.py`，并增加“侦察兵”步骤。
-2. **Level 2 (Efficiency)**: 实施 `graph_state.json` 替代 Markdown 表格，并优化子 Agent 的 Prompt 长度。
-3. **Level 3 (Architecture)**: 深度集成 `vector_store.py` 到 Synthesis 流程，实现长文档的分节生成。
+**优化方案：强制性的分节生成流程 (Section-wise Generator)**
+修改 `synthesizer/instructions.md`，禁止一次性生成全文。
 
-这套框架底子非常好，上述优化主要是为了让它在处理**超大规模、高复杂度**议题时，更省钱、更稳定、更聪明。
+* **新流程**：
+    1. **Phase 1**: 阅读所有 `executive_summary`，生成由 `##` 和 `###` 组成的详细 Markdown 大纲。
+    2. **Phase 2**: 遍历大纲的每一个 Header。
+    3. **Phase 3 (Loop)**:
+        * 针对当前 Header 生成具体的 Search Query（例如 "AI Market Size 2024 data"）。
+        * 调用 `vector_store.query` 获取针对该小节的 Context。
+        * 生成该小节内容并**追加 (Append)** 到 `full_report.md` 文件。
+        * **清空 Context**，进入下一节。
+
+* **收益**：理论上可以生成无限长度的报告，且每一节的引用密度和深度都保持一致。
+
+### 4. 鲁棒性优化：死链防御与时光机 (Internet Archive Integration)
+
+**痛点：**
+Deep Research 往往引用具体的 URL。随着时间推移，或者在抓取过程中，很多链接会变成 404，导致 `citation-validator` 报错或报告质量下降。
+
+**优化方案：在 `WebFetch` 失败时自动回退**
+修改 `scripts/preprocess_document.py` 或 Agent 指令。
+
+* **逻辑**：
+    当 `WebFetch` 返回 404/403/Timeout 时，不要直接放弃。
+    自动构建 Wayback Machine 链接：
+    `https://archive.org/wayback/available?url={TARGET_URL}`
+    如果存在快照，直接抓取快照内容，并在引用中标记 `(Archived version)`.
+
+### 5. 成本与效率优化：内容指纹去重 (SimHash Deduplication)
+
+**痛点：**
+多个 Agent 并行搜索时，经常会搜到不同 URL 但内容相同的文章（例如转载的新闻、同一份报告的不同托管地址）。`url_manifest.py` 只能基于 URL 去重，无法基于内容去重。这导致 Token 浪费和重复信息。
+
+**优化方案：基于 SimHash 的内容去重**
+在 `scripts/preprocess_document.py` 中引入 SimHash 或 MinHash。
+
+* **逻辑**：
+    1. 清洗完文档后，计算文本的 SimHash 指纹。
+    2. 在 `manifest` 中存储指纹。
+    3. 新文档入库前，计算汉明距离。如果距离 < 3，视为重复内容，直接丢弃或合并引用源。
+
+### 6. 用户交互优化：动态预算与熔断机制 (Dynamic Budgeting & Circuit Breaking)
+
+**痛点：**
+目前的 GoT 是基于迭代次数（Max Iterations）或固定 Agent 数量的。如果某个子方向完全没有信息（Dead End），Agent 仍会尝试搜索直到超时；或者如果某个方向信息量巨大，Agent 却因为步数限制而浅尝辄止。
+
+**优化方案：引入“信息熵”作为停止标准**
+在 `got-controller` 中增加动态预算逻辑。
+
+* **逻辑**：
+  * **熔断**：如果连续 3 次 `Generate` 操作产生的新节点 Score 都低于 5.0，自动剪枝该分支，不再投入 Token。
+  * **追加**：如果某个节点 Score > 9.0 且含有 "Needs further investigation" 的标记，自动为该分支增加 2 个搜索深度（Depth Budget）。
+
+---
+
+### 推荐的实施优先级
+
+1. **P0 (Critical)**: **SQLite 迁移**。这是保证多 Agent 并行不崩盘的基础。
+2. **P1 (High)**: **分节式合成 (Section-wise Synthesis)**。这直接决定了最终报告的深度和可读性。
+3. **P2 (Medium)**: **死链防御** 和 **引用追溯**。这两个能显著提升报告的“学术感”和可靠性。
+
+这套框架的基础非常扎实，加上这些优化后，完全可以作为生产级的 Deep Research 引擎。

@@ -24,15 +24,28 @@ from pathlib import Path
 
 try:
     from bs4 import BeautifulSoup
+
     HAS_BS4 = True
 except ImportError:
     HAS_BS4 = False
 
 try:
     import html2text
+
     HAS_HTML2TEXT = True
 except ImportError:
     HAS_HTML2TEXT = False
+
+try:
+    from simhash_dedup import DuplicationDetector, SimHash
+
+    HAS_SIMHASH = True
+except (ImportError, ModuleNotFoundError):
+    HAS_SIMHASH = False
+
+
+# Global fingerprint registry for deduplication (in-memory across processing)
+_FINGERPRINT_REGISTRY = {}
 
 
 def convert_table_to_markdown(table_element) -> str:
@@ -40,7 +53,7 @@ def convert_table_to_markdown(table_element) -> str:
     if not HAS_BS4:
         return ""
 
-    rows = table_element.find_all('tr')
+    rows = table_element.find_all("tr")
     if not rows:
         return ""
 
@@ -48,31 +61,31 @@ def convert_table_to_markdown(table_element) -> str:
     header_processed = False
 
     for row in rows:
-        cells = row.find_all(['th', 'td'])
+        cells = row.find_all(["th", "td"])
         if not cells:
             continue
 
         cell_texts = []
         for cell in cells:
-            text = cell.get_text(strip=True).replace('|', '\\|')
-            text = ' '.join(text.split())
+            text = cell.get_text(strip=True).replace("|", "\\|")
+            text = " ".join(text.split())
             cell_texts.append(text)
 
-        row_text = '| ' + ' | '.join(cell_texts) + ' |'
+        row_text = "| " + " | ".join(cell_texts) + " |"
         markdown_rows.append(row_text)
 
-        if row.find('th') or not header_processed:
-            separator = '| ' + ' | '.join(['---'] * len(cells)) + ' |'
+        if row.find("th") or not header_processed:
+            separator = "| " + " | ".join(["---"] * len(cells)) + " |"
             markdown_rows.append(separator)
             header_processed = True
 
-    return '\n'.join(markdown_rows)
+    return "\n".join(markdown_rows)
 
 
 def extract_tables(soup) -> list:
     """Extract all tables from HTML and convert to Markdown."""
     tables = []
-    for table in soup.find_all('table'):
+    for table in soup.find_all("table"):
         md_table = convert_table_to_markdown(table)
         if md_table and len(md_table) > 20:
             tables.append(md_table)
@@ -86,27 +99,53 @@ def clean_html(raw_html: str) -> str:
     """
     if not HAS_BS4:
         # Fallback: basic regex cleaning if BeautifulSoup not available
-        text = re.sub(r'<script[^>]*>.*?</script>', '', raw_html, flags=re.DOTALL | re.IGNORECASE)
-        text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
-        text = re.sub(r'<nav[^>]*>.*?</nav>', '', text, flags=re.DOTALL | re.IGNORECASE)
-        text = re.sub(r'<footer[^>]*>.*?</footer>', '', text, flags=re.DOTALL | re.IGNORECASE)
-        text = re.sub(r'<header[^>]*>.*?</header>', '', text, flags=re.DOTALL | re.IGNORECASE)
-        text = re.sub(r'<aside[^>]*>.*?</aside>', '', text, flags=re.DOTALL | re.IGNORECASE)
-        text = re.sub(r'<[^>]+>', ' ', text)
-        text = re.sub(r'\s+', ' ', text)
+        text = re.sub(
+            r"<script[^>]*>.*?</script>", "", raw_html, flags=re.DOTALL | re.IGNORECASE
+        )
+        text = re.sub(
+            r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL | re.IGNORECASE
+        )
+        text = re.sub(r"<nav[^>]*>.*?</nav>", "", text, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(
+            r"<footer[^>]*>.*?</footer>", "", text, flags=re.DOTALL | re.IGNORECASE
+        )
+        text = re.sub(
+            r"<header[^>]*>.*?</header>", "", text, flags=re.DOTALL | re.IGNORECASE
+        )
+        text = re.sub(
+            r"<aside[^>]*>.*?</aside>", "", text, flags=re.DOTALL | re.IGNORECASE
+        )
+        text = re.sub(r"<[^>]+>", " ", text)
+        text = re.sub(r"\s+", " ", text)
         return text.strip()
 
-    soup = BeautifulSoup(raw_html, 'html.parser')
+    soup = BeautifulSoup(raw_html, "html.parser")
 
     # Extract tables FIRST before removing other elements
     extracted_tables = extract_tables(soup)
 
     # Remove interference elements
     tags_to_remove = [
-        "script", "style", "nav", "footer", "header",
-        "aside", "iframe", "noscript", "form", "button",
-        "input", "select", "textarea", "svg", "canvas",
-        "advertisement", "ad", "banner", "popup", "modal"
+        "script",
+        "style",
+        "nav",
+        "footer",
+        "header",
+        "aside",
+        "iframe",
+        "noscript",
+        "form",
+        "button",
+        "input",
+        "select",
+        "textarea",
+        "svg",
+        "canvas",
+        "advertisement",
+        "ad",
+        "banner",
+        "popup",
+        "modal",
     ]
 
     for tag in soup(tags_to_remove):
@@ -114,10 +153,26 @@ def clean_html(raw_html: str) -> str:
 
     # Remove elements by common ad/nav class names
     ad_patterns = [
-        'ad', 'ads', 'advertisement', 'banner', 'sidebar',
-        'nav', 'navigation', 'menu', 'footer', 'header',
-        'popup', 'modal', 'overlay', 'cookie', 'newsletter',
-        'social', 'share', 'comment', 'related', 'recommended'
+        "ad",
+        "ads",
+        "advertisement",
+        "banner",
+        "sidebar",
+        "nav",
+        "navigation",
+        "menu",
+        "footer",
+        "header",
+        "popup",
+        "modal",
+        "overlay",
+        "cookie",
+        "newsletter",
+        "social",
+        "share",
+        "comment",
+        "related",
+        "recommended",
     ]
 
     for pattern in ad_patterns:
@@ -139,15 +194,15 @@ def clean_html(raw_html: str) -> str:
         text = h.handle(str(soup))
     else:
         # Fallback: Extract text with newlines
-        text = soup.get_text(separator='\n')
+        text = soup.get_text(separator="\n")
 
     # Clean whitespace
     lines = (line.strip() for line in text.splitlines())
     chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-    text = '\n'.join(chunk for chunk in chunks if chunk)
+    text = "\n".join(chunk for chunk in chunks if chunk)
 
     # Remove excessive newlines
-    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
 
     # Append extracted tables at the end with section header
     if extracted_tables:
@@ -159,36 +214,37 @@ def clean_html(raw_html: str) -> str:
 
 def extract_metadata(soup_or_text, doc_type: str) -> dict:
     """Extract metadata from document."""
-    metadata = {
-        "title": "",
-        "description": "",
-        "author": "",
-        "date": ""
-    }
+    metadata = {"title": "", "description": "", "author": "", "date": ""}
 
     if HAS_BS4 and doc_type == "html":
         try:
-            soup = BeautifulSoup(soup_or_text, 'html.parser') if isinstance(soup_or_text, str) else soup_or_text
+            soup = (
+                BeautifulSoup(soup_or_text, "html.parser")
+                if isinstance(soup_or_text, str)
+                else soup_or_text
+            )
 
             # Title
-            title_tag = soup.find('title')
+            title_tag = soup.find("title")
             if title_tag:
                 metadata["title"] = title_tag.get_text().strip()
 
             # Meta description
-            desc_meta = soup.find('meta', attrs={'name': 'description'})
+            desc_meta = soup.find("meta", attrs={"name": "description"})
             if desc_meta:
-                metadata["description"] = desc_meta.get('content', '')
+                metadata["description"] = desc_meta.get("content", "")
 
             # Author
-            author_meta = soup.find('meta', attrs={'name': 'author'})
+            author_meta = soup.find("meta", attrs={"name": "author"})
             if author_meta:
-                metadata["author"] = author_meta.get('content', '')
+                metadata["author"] = author_meta.get("content", "")
 
             # Date
-            date_meta = soup.find('meta', attrs={'name': re.compile(r'date|published', re.I)})
+            date_meta = soup.find(
+                "meta", attrs={"name": re.compile(r"date|published", re.I)}
+            )
             if date_meta:
-                metadata["date"] = date_meta.get('content', '')
+                metadata["date"] = date_meta.get("content", "")
         except Exception:
             pass
 
@@ -198,6 +254,65 @@ def extract_metadata(soup_or_text, doc_type: str) -> dict:
 def estimate_tokens(text: str) -> int:
     """Estimate token count (rough approximation: 1 token ~ 4 characters for English)."""
     return len(text) // 4
+
+
+def _check_duplicate(url_or_path: str, content: str) -> dict:
+    """Check if content is duplicate using SimHash.
+
+    Args:
+        url_or_path: URL or file path as identifier
+        content: Document content to check
+
+    Returns:
+        Dictionary with duplicate status and fingerprint
+    """
+    # Try to import SimHash at runtime (more reliable than module-level import)
+    try:
+        from scripts.simhash_dedup import SimHash
+
+        has_simhash = True
+    except (ImportError, ModuleNotFoundError):
+        has_simhash = False
+
+    if not has_simhash:
+        return {"is_duplicate": False, "fingerprint": None, "original_url": None}
+
+    global _FINGERPRINT_REGISTRY
+
+    if not _FINGERPRINT_REGISTRY:
+        manifest_path = (
+            Path.cwd() / "RESEARCH" / "current" / "content_fingerprints.json"
+        )
+        if manifest_path.exists():
+            try:
+                with open(manifest_path, "r") as f:
+                    _FINGERPRINT_REGISTRY = json.load(f)
+            except Exception:
+                _FINGERPRINT_REGISTRY = {}
+
+    simhash = SimHash()
+    current_fingerprint = simhash.compute(content)
+
+    for existing_url, existing_fp in _FINGERPRINT_REGISTRY.items():
+        distance = simhash.hamming_distance(current_fingerprint, existing_fp)
+        if distance <= 3:
+            return {
+                "is_duplicate": True,
+                "fingerprint": current_fingerprint,
+                "original_url": existing_url,
+            }
+
+    _FINGERPRINT_REGISTRY[url_or_path] = current_fingerprint
+    manifest_path = Path.cwd() / "RESEARCH" / "current" / "content_fingerprints.json"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(manifest_path, "w") as f:
+        json.dump(_FINGERPRINT_REGISTRY, f)
+
+    return {
+        "is_duplicate": False,
+        "fingerprint": current_fingerprint,
+        "original_url": None,
+    }
 
 
 def process_file(input_path: str) -> dict:
@@ -211,7 +326,7 @@ def process_file(input_path: str) -> dict:
     # Expected structure: RESEARCH/topic/data/raw/file.html -> RESEARCH/topic/data/processed/file_cleaned.md
     try:
         parts = input_path.parts
-        raw_idx = parts.index('raw')
+        raw_idx = parts.index("raw")
         base_parts = parts[:raw_idx]
         processed_dir = Path(*base_parts) / "processed"
     except ValueError:
@@ -226,7 +341,7 @@ def process_file(input_path: str) -> dict:
 
     # Read file
     try:
-        with open(input_path, 'r', encoding='utf-8', errors='ignore') as f:
+        with open(input_path, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
     except Exception as e:
         return {"error": f"Failed to read file: {e}", "status": "failed"}
@@ -234,11 +349,14 @@ def process_file(input_path: str) -> dict:
     original_tokens = estimate_tokens(content)
 
     # Determine document type and process
-    if input_path.suffix.lower() in ['.html', '.htm'] or '<html' in content[:500].lower():
+    if (
+        input_path.suffix.lower() in [".html", ".htm"]
+        or "<html" in content[:500].lower()
+    ):
         cleaned_text = clean_html(content)
         doc_type = "html"
         metadata = extract_metadata(content, "html")
-    elif input_path.suffix.lower() == '.pdf':
+    elif input_path.suffix.lower() == ".pdf":
         # PDF processing would require additional libraries (PyPDF2, pdfplumber)
         # For now, just pass through
         cleaned_text = content
@@ -260,20 +378,38 @@ original_tokens: {original_tokens}
 cleaned_tokens: {cleaned_tokens}
 saved_tokens: {saved_tokens}
 type: {doc_type}
-title: {metadata.get('title', '')}
-author: {metadata.get('author', '')}
-date: {metadata.get('date', '')}
+title: {metadata.get("title", "")}
+author: {metadata.get("author", "")}
+date: {metadata.get("date", "")}
 ---
 
 """
 
     # Write output
     try:
-        with open(output_path, 'w', encoding='utf-8') as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             f.write(frontmatter)
             f.write(cleaned_text)
     except Exception as e:
         return {"error": f"Failed to write file: {e}", "status": "failed"}
+
+    # SimHash content deduplication
+    dedup_result = _check_duplicate(input_path, cleaned_text)
+    if dedup_result["is_duplicate"]:
+        return {
+            "status": "duplicate",
+            "original_url": dedup_result["original_url"],
+            "input_path": str(input_path),
+            "output_path": None,
+            "original_tokens": original_tokens,
+            "cleaned_tokens": cleaned_tokens,
+            "saved_tokens": saved_tokens,
+            "savings_percent": round(
+                (saved_tokens / original_tokens * 100) if original_tokens > 0 else 0, 1
+            ),
+            "doc_type": doc_type,
+            "duplicate_of": dedup_result["original_url"],
+        }
 
     return {
         "status": "success",
@@ -282,8 +418,11 @@ date: {metadata.get('date', '')}
         "original_tokens": original_tokens,
         "cleaned_tokens": cleaned_tokens,
         "saved_tokens": saved_tokens,
-        "savings_percent": round((saved_tokens / original_tokens * 100) if original_tokens > 0 else 0, 1),
-        "doc_type": doc_type
+        "savings_percent": round(
+            (saved_tokens / original_tokens * 100) if original_tokens > 0 else 0, 1
+        ),
+        "doc_type": doc_type,
+        "content_hash": dedup_result["fingerprint"],
     }
 
 
@@ -295,8 +434,13 @@ def process_directory(input_dir: str) -> list:
     if not input_path.is_dir():
         return [{"error": f"Not a directory: {input_dir}"}]
 
-    for file_path in input_path.glob('*'):
-        if file_path.is_file() and file_path.suffix.lower() in ['.html', '.htm', '.txt', '.md']:
+    for file_path in input_path.glob("*"):
+        if file_path.is_file() and file_path.suffix.lower() in [
+            ".html",
+            ".htm",
+            ".txt",
+            ".md",
+        ]:
             result = process_file(str(file_path))
             results.append(result)
 
@@ -305,10 +449,14 @@ def process_directory(input_dir: str) -> list:
 
 def main():
     if len(sys.argv) < 2:
-        print(json.dumps({
-            "error": "Usage: python3 preprocess_document.py <input_file_or_directory>",
-            "status": "failed"
-        }))
+        print(
+            json.dumps(
+                {
+                    "error": "Usage: python3 preprocess_document.py <input_file_or_directory>",
+                    "status": "failed",
+                }
+            )
+        )
         sys.exit(1)
 
     input_path = sys.argv[1]

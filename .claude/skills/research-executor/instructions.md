@@ -317,13 +317,18 @@ CRITICAL WORKFLOW (MUST FOLLOW):
    python3 scripts/url_manifest.py check "<url>" --topic <topic_name>
 3. If URL cached: Read from local file (skip fetch)
 4. If URL not cached:
-   - Use WebFetch or mcp__web-reader__webReader
-   - Save to data/raw/
-   - Register URL immediately
-   - Run preprocess_document.py
-   - Read from processed file
+   a. Try WebFetch or mcp__web-reader__webReader
+   b. ON FAILURE (404/403/timeout/connection error):
+      - Run: python3 scripts/wayback_fetcher.py fetch "<url>" --topic <topic_name>
+      - If archived version available, use it and mark citation as "(Archived version)"
+      - Log: "Retrieved archived version from YYYY-MM-DD"
+   c. Save successful content to data/raw/
+   d. Register URL immediately (both original and archived)
+   e. Run preprocess_document.py (includes SimHash deduplication)
+   f. Read from processed file
 5. RECURSIVE REFERENCE HOPPING (for A-rated sources):
    - Extract bibliography/references from high-quality sources
+   - Run: python3 scripts/citation_chaser.py extract "<title>" --topic <topic_name>
    - Add promising references to priority queue
    - Follow citation chains to original sources
    - Stop after 2 levels deep to avoid infinite loops
@@ -337,7 +342,7 @@ Focus on finding:
 
 Provide a structured summary with:
 - Key findings
-- All source URLs with full citations
+- All source URLs with full citations (mark archived sources)
 - Confidence ratings for claims (High/Medium/Low)
 - Any contradictions or gaps found
 ```
@@ -352,9 +357,12 @@ Provide a structured summary with:
 Find technical/academic information about [topic aspect].
 
 Tools to use:
-1. WebSearch for academic papers and technical resources
-2. WebFetch for PDF extraction and content analysis
-3. Save important findings to files using Read/Write tools
+1. WebSearch for academic papers and technical resources (use filetype:pdf, site:arxiv.org, site:IEEE Xplore)
+2. WebFetch or mcp__web-reader__webReader for PDF extraction
+3. ON 404/403/timeout: Use python3 scripts/wayback_fetcher.py fetch "<url>"
+4. Extract references from papers: python3 scripts/citation_chaser.py extract "<paper_title>"
+5. Run preprocess_document.py (includes SimHash deduplication)
+6. Save important findings to files using Read/Write tools
 
 Look for:
 - Peer-reviewed papers
@@ -362,12 +370,14 @@ Look for:
 - Methodologies and frameworks
 - Scientific evidence
 - Expert consensus
+- Primary sources (cited by 10+ other papers)
 
 Include proper academic citations:
 - Author names, publication year
 - Paper title, journal/conference name
 - DOI or direct URL
 - Key findings and sample sizes
+- For archived sources, mark as "(Archived version)"
 ```
 
 #### Agent Type 3: Cross-Reference Agent (1 agent)

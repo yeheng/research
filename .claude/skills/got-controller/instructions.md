@@ -269,6 +269,28 @@ Score: 1.0/10
 
 **CRITICAL OPTIMIZATION**: This prevents token waste on low-quality branches while allocating more resources to high-value discoveries.
 
+**Integration with State Manager**: Use `scripts/state_manager.py` for automated budget management:
+
+```python
+from scripts.state_manager import StateManager
+
+state = StateManager()
+
+# After each Score operation, run budget checks
+circuit_check = state.check_circuit_break(
+    node_id="current_node",
+    consecutive_threshold=3,
+    score_threshold=5.0
+)
+
+if circuit_check['should_break']:
+    print(f"⚠️ Circuit break triggered: {circuit_check['reason']}")
+    state.execute_circuit_break(
+        node_id="current_node",
+        reason="consecutive_low_scores"
+    )
+```
+
 **Circuit Breaking Rules**:
 
 1. **Low Score Circuit Breaker**:
@@ -279,6 +301,38 @@ Score: 1.0/10
 2. **High Value Expansion**:
    - If a node scores > 9.0 AND contains "Needs further investigation" marker, **ADD** 2 extra depth levels to that branch
    - Allocate additional Generate operations to high-scoring paths
+
+**Information Entropy for Stopping Criteria**:
+
+```python
+# Calculate information entropy to determine if we're getting new insights
+entropy_result = state.calculate_information_entropy(
+    new_node_ids=["new_node_1", "new_node_2"],
+    existing_node_ids=["existing_node_1", "existing_node_2"]
+)
+
+if entropy_result['recommendation'] == 'stop_exploration':
+    print("Low information gain. Stopping exploration of this branch.")
+    # Trigger circuit break
+```
+
+**Branch Health Monitoring**:
+
+```python
+# Get health metrics for a research branch
+health = state.get_branch_health(node_id="root_branch")
+
+if health['health'] == 'excellent':
+    print("🌟 Branch is excellent - continue and extend budget")
+    state.extend_branch_budget(
+        node_id="root_branch",
+        additional_depth=2,
+        additional_tokens=10000,
+        reason="high_quality_research"
+    )
+elif health['health'] == 'poor':
+    print("⚠️ Branch is poor - consider circuit breaking")
+```
 
 **Implementation**:
 
@@ -292,6 +346,114 @@ Score: 1.0/10
 - Check: Score > 9.0 AND high research potential?
   - YES → Increase depth budget by 2 levels
   - NO → Continue with standard budget
+
+**Entropy Check** (run after each Generate operation):
+- Check: Is new information being added (entropy > 0.2)?
+  - YES → Continue exploration
+  - NO → Consider stopping - diminishing returns
+```
+
+**Example: Circuit Breaking in Action**
+
+```python
+from scripts.state_manager import StateManager
+
+state = StateManager()
+
+# Simulate a branch with consecutive low scores
+# Iteration 1: Generate(3) - scores: [6.5, 4.2, 7.8]
+state.update_node("node_1_1", score=6.5)
+state.update_node("node_1_2", score=4.2)  # Low score warning
+state.update_node("node_1_3", score=7.8)
+
+# Iteration 2: Generate from best nodes - scores: [5.8, 4.1, 8.2]
+state.update_node("node_2_1", score=5.8)
+state.update_node("node_2_2", score=4.1)  # Another low score
+state.update_node("node_2_3", score=8.2)
+
+# Check for circuit break on node_1_2 (which had score 4.2)
+circuit_check = state.check_circuit_break(
+    node_id="node_1_2",
+    consecutive_threshold=3,
+    score_threshold=5.0
+)
+
+print(circuit_check)
+# Output: {'should_break': False, 'reason': 'insufficient_data', 'children_count': 1}
+
+# Iteration 3: Generate from node_1_2 - scores: [3.9, 4.5, 4.8]
+state.update_node("node_3_1", score=3.9)
+state.update_node("node_3_2", score=4.5)
+state.update_node("node_3_3", score=4.8)
+
+# Check again - now we have 3 low scores
+circuit_check = state.check_circuit_break(
+    node_id="node_1_2",
+    consecutive_threshold=3,
+    score_threshold=5.0
+)
+
+print(circuit_check)
+# Output:
+# {
+#   'should_break': True,
+#   'reason': 'consecutive_low_scores',
+#   'consecutive_count': 3,
+#   'scores': [4.2, 4.1, 3.9],
+#   'avg_score': 4.07,
+#   'threshold': 5.0,
+#   'affected_nodes': ['node_1_2', 'node_2_2', 'node_3_1']
+# }
+
+# Execute circuit break
+if circuit_check['should_break']:
+    result = state.execute_circuit_break(
+        node_id="node_1_2",
+        reason="consecutive_low_scores"
+    )
+    print(f"⚠️ Circuit broken! Pruned {result['pruned_count']} nodes")
+```
+
+**Example: High-Value Branch Extension**
+
+```python
+# After a node scores 9.2 with high research potential
+state.update_node("node_5_1", score=9.2)
+
+# Check branch health
+health = state.get_branch_health("node_5_1")
+print(health)
+# Output: {'health': 'excellent', 'recommendation': 'continue_and_extend', ...}
+
+# Extend budget for high-value branch
+state.extend_branch_budget(
+    node_id="node_5_1",
+    additional_depth=2,
+    additional_tokens=15000,
+    reason="high_quality_node_with_primary_sources"
+)
+
+print("✅ Budget extended for high-value research path")
+```
+
+**Example: Information Entropy for Stopping Criteria**
+
+```python
+# After generating new nodes, calculate entropy
+entropy = state.calculate_information_entropy(
+    new_node_ids=["node_new_1", "node_new_2"],
+    existing_node_ids=["node_existing_1", "node_existing_2"]
+)
+
+print(f"Entropy: {entropy['entropy']:.2f}")
+print(f"Interpretation: {entropy['interpretation']}")
+print(f"Recommendation: {entropy['recommendation']}")
+
+# Sample outputs:
+# Entropy: 0.85 → 'high_novelty' → 'continue'
+# Entropy: 0.45 → 'moderate_novelty' → 'continue'
+# Entropy: 0.15 → 'low_novelty' → 'consider_stopping'
+# Entropy: 0.05 → 'duplicate_content' → 'stop_exploration'
 ```
 
 ## GoT Research Execution Patterns
