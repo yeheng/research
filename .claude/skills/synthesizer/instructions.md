@@ -836,6 +836,9 @@ Every Synthesizer execution must output:
 - `RESEARCH/[topic]/full_report.md` - Comprehensive synthesis
 - `RESEARCH/[topic]/executive_summary.md` - Condensed summary
 - `RESEARCH/[topic]/synthesis_notes.md` - Process documentation
+- `RESEARCH/[topic]/data/key_statistics.md` - Auto-generated from fact ledger
+- `RESEARCH/[topic]/data/fact_ledger/facts.json` - All extracted atomic facts
+- `RESEARCH/[topic]/data/fact_ledger/conflicts.json` - Detected conflicts
 ```
 
 ### 3. Quality Score
