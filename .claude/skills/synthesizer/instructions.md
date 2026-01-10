@@ -110,6 +110,70 @@ EOF
 - Assess source quality and credibility
 - Group related findings together
 
+**NEW: Data-to-Text Synthesis with Fact Ledger**
+
+Before traditional text-based synthesis, leverage the atomic fact ledger for precision:
+
+```bash
+# Query the fact ledger for session statistics
+python3 scripts/fact_ledger.py statistics <session_id> --output RESEARCH/[topic]/data/key_statistics.md
+
+# Query specific facts by entity
+python3 scripts/fact_ledger.py query <session_id> --entity "AI Healthcare Market"
+
+# Check for conflicts that need resolution
+python3 scripts/fact_ledger.py conflicts <session_id>
+```
+
+**Data-to-Text Synthesis Benefits**:
+- **Precision Preserved**: Extract exact values ("$22.4 billion") from fact ledger, not summarized text
+- **Auto-generated Tables**: Key statistics table generated directly from structured data
+- **Conflict Awareness**: Known conflicts highlighted before synthesis begins
+- **Source Quality Integration**: A-E ratings automatically included
+
+**Data-to-Text Workflow**:
+
+```markdown
+1. **Load Fact Ledger**:
+   - Read facts.json from data/fact_ledger/
+   - Load conflicts.json for known discrepancies
+   - Review key_statistics.md for high-confidence facts
+
+2. **For each section**:
+   a. Query relevant facts by entity/attribute
+   b. Use exact values from fact ledger (not paraphrased text)
+   c. Include source attribution from fact metadata
+   d. Flag conflicts inline where they exist
+
+3. **Auto-generate Data Tables**:
+   - Use fact_ledger statistics output directly
+   - Preserve units and precision
+   - Include source quality ratings
+```
+
+**Example Data-to-Text Synthesis**:
+
+```markdown
+# Instead of:
+"The market is worth billions and growing rapidly."
+
+# Use fact ledger data:
+"The global AI in healthcare market was valued at $22.4 billion in 2023
+(Grand View Research, 2024, Quality: B) and is projected to reach $187.95 billion
+by 2030, representing a CAGR of 37.5% (Grand View Research, 2024, Quality: B)."
+```
+
+**Fact Query Template**:
+
+When writing a section about a specific topic, query the fact ledger:
+
+```python
+# Pseudo-code for fact-driven synthesis
+facts = query_facts(session_id, entity="AI Healthcare Market")
+for fact in facts:
+    text += f"{fact['value']} ({fact['source']['author']}, {fact['source']['date']}, Quality: {fact['source']['quality']})"
+```
+
 **CRITICAL: Use Vector Store for Intelligent Retrieval**
 
 Before synthesizing, index all agent findings into the vector store for semantic search:
@@ -161,6 +225,24 @@ Create thematic clusters:
 ```
 
 ### Phase 2: Consensus Building
+
+**Pre-check: Review Fact Ledger Conflicts**
+
+Before building consensus from text, check the fact ledger for known conflicts:
+
+```bash
+python3 scripts/fact_ledger.py conflicts <session_id>
+```
+
+This returns conflicts already detected during Phase 3.7 (Fact Extraction), saving time by not re-discovering them from text.
+
+**Conflict Severity Guide from Fact Ledger**:
+
+| Severity | Numeric Difference | Handling |
+|----------|-------------------|----------|
+| Critical | >20% | Must address in report, add to Limitations |
+| Moderate | 5-20% | Note in relevant section with explanation |
+| Minor | <5% | Use most authoritative source, mention range |
 
 **For each theme, identify**:
 

@@ -65,6 +65,7 @@ Ready to proceed? (User: Yes/No/Modifications needed)
 **Purpose**: Before deploying full research agents, send a lightweight "scout" agent to validate the research plan and identify potential issues.
 
 **TOTE Model**:
+
 - **Test**: Is the research plan feasible? Are sources available?
 - **Operate**: Quick reconnaissance of 2-3 key sources per subtopic
 - **Test**: Did we find sufficient high-quality sources? Any blockers?
@@ -78,6 +79,7 @@ Ready to proceed? (User: Yes/No/Modifications needed)
    - Identify if any subtopics are "dead ends" with no good sources
 
 2. **Feasibility Assessment**:
+
    ```markdown
    For each subtopic:
    - ✅ Good: Found 3+ high-quality sources → Proceed as planned
@@ -138,6 +140,7 @@ If 50%+ subtopics are ❌ Poor:
 ```
 
 **Why Scout Agents Matter**:
+
 - **Prevent wasted effort**: Don't deploy 5 agents on a subtopic with no good sources
 - **Early course correction**: Adjust plan before spending tokens
 - **Risk mitigation**: Identify blockers (paywalls, language barriers, data gaps) early
@@ -152,18 +155,22 @@ Deploy multiple Task agents in parallel to gather information from different sou
 **CRITICAL**: To reduce token consumption by 60-90%, use the "Download → Clean → Read" workflow instead of reading raw HTML directly.
 
 **Step 0: MANDATORY URL Manifest Check (BEFORE EVERY FETCH)**
+
 ```bash
 # CRITICAL: Before fetching ANY URL, you MUST check the manifest first!
 python3 scripts/url_manifest.py check "<url>" --topic <topic_name>
 ```
 
 **If URL is found in cache**:
+
 - DO NOT fetch again - use the local file path returned
 - Read from `local_processed` (preferred) or `local_raw`
 
 **If URL is not found**:
+
 - Proceed to Step 1 (Fetch & Save)
 - After saving, register the URL immediately:
+
 ```bash
 python3 scripts/url_manifest.py register "<url>" --topic <topic_name> --local RESEARCH/<topic>/data/raw/<filename>.html
 ```
@@ -171,6 +178,7 @@ python3 scripts/url_manifest.py register "<url>" --topic <topic_name> --local RE
 **Why this matters**: Parallel agents often try to fetch the same popular sources (Wikipedia, major news sites, etc.). Without manifest checking, you waste tokens and time re-fetching identical content.
 
 **Step 1: Fetch & Save Raw Data**
+
 ```markdown
 - **DO NOT** directly use `WebFetch` content in the Context Window.
 - After fetching content, immediately save to: `RESEARCH/[topic]/data/raw/[source_id].html`
@@ -179,16 +187,19 @@ python3 scripts/url_manifest.py register "<url>" --topic <topic_name> --local RE
 ```
 
 **Step 2: Pre-process Document**
+
 ```bash
 python3 scripts/preprocess_document.py RESEARCH/[topic]/data/raw/[source_id].html
 ```
 
 The script returns JSON with:
+
 - `output_path`: Path to cleaned markdown file
 - `saved_tokens`: Number of tokens saved
 - `savings_percent`: Percentage reduction
 
 **Step 3: Read Processed Data**
+
 ```markdown
 - Use `Read` tool to access cleaned markdown from `data/processed/`
 - If file is still large (>10k tokens), read first 50 lines for summary
@@ -196,6 +207,7 @@ The script returns JSON with:
 ```
 
 **Example Workflow**:
+
 ```markdown
 1. Agent fetches: https://example.com/research-report
 2. Agent saves to: RESEARCH/topic/data/raw/example_report.html (original: ~50k tokens)
@@ -205,6 +217,7 @@ The script returns JSON with:
 ```
 
 **Benefits**:
+
 - Removes ads, navigation, scripts, styles
 - Extracts only core content
 - Preserves metadata in YAML frontmatter
@@ -259,7 +272,9 @@ Before deploying agents, assess the research complexity to optimize resource all
 |-------|---------------|----------|
 | Phase 1 → 2 | User approves refined question | Ask if unclear |
 | Phase 2 → 3 | Research plan approved | Present plan, wait for approval |
-| Phase 3 → 4 | All agents return findings | Wait for all agents |
+| Phase 3 → 3.5 | All agents return findings | Wait for all agents |
+| Phase 3.5 → 3.7 | Red Team validation complete | Incorporate counter-evidence |
+| Phase 3.7 → 4 | Fact extraction complete, conflicts flagged | Review critical conflicts |
 | Phase 4 → 5 | Source triangulation complete | Cross-check findings |
 | Phase 5 → 6 | Draft synthesis score ≥ 7.0 | Refine if below threshold |
 | Phase 6 → 7 | Validation score ≥ 8.0 | Fix issues before output |
@@ -291,6 +306,7 @@ Task(agent_4, "Cross-reference verification of claims from agents 1-3...")
 
 **Search Query Diversity Requirements**:
 To maximize high-quality (A/B grade) source discovery, each agent MUST use diverse search strategies:
+
 - Use `site:gov` or `site:edu` for authoritative government/academic sources
 - Use `filetype:pdf` for research papers and official reports
 - Use `site:*.org` for established organization sources
@@ -298,6 +314,7 @@ To maximize high-quality (A/B grade) source discovery, each agent MUST use diver
 - Try both natural language AND keyword-based queries
 
 **Example Search Strategy**:
+
 ```
 # For topic "AI safety regulations"
 Query 1: AI safety regulations 2024 site:gov        # Government sources
@@ -414,6 +431,7 @@ For each claim, provide:
 **Purpose**: Before synthesizing findings, deploy an adversarial "Red Team" agent to actively search for counter-evidence, limitations, and biases. This prevents "echo chamber" effects when all search results share the same bias.
 
 **Why This Matters**:
+
 - Search results may be biased (SEO-optimized marketing, confirmation bias)
 - High-profile claims need rigorous scrutiny
 - Scientific findings require replication awareness
@@ -478,6 +496,7 @@ If All Claims Robust (✓):
 **Integration with GoT**:
 
 When using GoT Controller:
+
 1. After Generate operations complete, ALWAYS run Red Team Agent
 2. If Red Team finds strong counter-evidence, trigger `Refine(1)` on affected nodes
 3. Score adjustment: Nodes with unaddressed counter-evidence get -1.0 to -2.0 penalty
@@ -504,6 +523,147 @@ Save red team findings to `research_notes/red_team_findings.json`:
   "overall_assessment": "Claims are generally robust with some caveats needed"
 }
 ```
+
+---
+
+### Phase 3.7: Fact Extraction (NEW - Atomic Fact Ledger)
+
+**Purpose**: Before synthesizing findings, extract atomic facts from all agent outputs to preserve numerical precision and enable structured data analysis. This prevents the "lossy compression" problem where specific values (e.g., "$22.4B") are lost when summarizing.
+
+**Why This Matters**:
+
+- Layer-by-layer summarization loses numerical precision ("$22.4 billion" → "billions")
+- Key statistics need to be preserved for accurate reporting
+- Enables automatic generation of data tables and statistics sections
+- Detects conflicts between sources with quantifiable differences
+
+**Fact Extraction Process**:
+
+1. **For each completed agent output**:
+
+   ```bash
+   # Read the agent's findings
+   Read: RESEARCH/[topic]/research_notes/agent_[id]_findings.md
+
+   # Extract atomic facts using the fact-extractor skill
+   # Store in SQLite fact ledger via state_manager
+   ```
+
+2. **Atomic Fact Structure**:
+
+   ```json
+   {
+     "entity": "AI Healthcare Market",
+     "attribute": "Market Size 2023",
+     "value": "$22.4 billion",
+     "value_type": "currency",
+     "value_numeric": 22.4,
+     "unit": "USD billion",
+     "confidence": "High",
+     "source": {
+       "url": "https://...",
+       "author": "Grand View Research",
+       "date": "2024",
+       "quality": "B",
+       "excerpt": "the global AI in healthcare market size was valued at USD 22.4 billion in 2023"
+     }
+   }
+   ```
+
+3. **What to Extract**:
+   - **Numerical data**: Market sizes, growth rates, percentages, counts
+   - **Temporal data**: Dates, timelines, milestones, forecasts
+   - **Comparative data**: Rankings, shares, ratios
+   - **Categorical facts**: Classifications, types, categories
+
+4. **What NOT to Extract**:
+   - Vague statements ("growing rapidly", "significant impact")
+   - Opinions without evidence
+   - Common knowledge that doesn't need citation
+   - Compound statements (break into atomic facts)
+
+**Fact Extraction Workflow**:
+
+```markdown
+For each agent output file:
+
+1. Read processed findings from research_notes/
+2. Identify sections with factual claims (tables, statistics, data)
+3. Extract atomic facts using JSON structure above
+4. Store facts in SQLite via fact_ledger.py:
+   ```bash
+   python3 scripts/fact_ledger.py create <session_id> <facts.json>
+   ```
+
+5. Detect conflicts between facts:
+
+   ```bash
+   python3 scripts/fact_ledger.py conflicts <session_id>
+   ```
+
+6. Generate key statistics:
+
+   ```bash
+   python3 scripts/fact_ledger.py statistics <session_id> --output RESEARCH/[topic]/data/key_statistics.md
+   ```
+
+```
+
+**Conflict Detection**:
+
+When multiple sources report different values for the same entity+attribute:
+
+| Severity | Condition | Action |
+|----------|-----------|--------|
+| **Critical** | >20% difference | Flag for user review, add to Limitations |
+| **Moderate** | 5-20% difference | Note in report, explain possible reasons |
+| **Minor** | <5% difference | Use most authoritative source |
+
+**Example Conflict**:
+```
+
+Entity: AI Healthcare Market
+Attribute: Market Size 2024
+
+- MarketsandMarkets: $28.4 billion (B-rated source)
+- Fortune Business Insights: $19.2 billion (B-rated source)
+Difference: 47.9% → CRITICAL
+
+Possible explanations:
+
+- Different market segment definitions
+- Different geographic scope
+- Different calculation methodologies
+
+Recommendation: Report both values with context
+
+```
+
+**Integration with Phase 5 (Synthesis)**:
+
+The fact ledger enables "Data-to-Text" synthesis:
+- Query facts by entity/attribute instead of re-reading summaries
+- Auto-generate statistics tables from fact_ledger
+- Preserve exact values in final report
+- Include source quality ratings
+
+**Output Artifacts**:
+
+```
+
+RESEARCH/[topic]/data/fact_ledger/
+├── facts.json           # All extracted facts
+├── conflicts.json       # Detected conflicts
+├── statistics.json      # Summary statistics
+└── extraction_log.md    # Processing log
+
+```
+
+**Quality Metrics**:
+- **Extraction completeness**: All numerical claims captured
+- **Attribution rate**: 100% of facts linked to sources
+- **Conflict detection**: All discrepancies flagged
+- **Precision preserved**: No rounding or approximation
 
 ---
 
