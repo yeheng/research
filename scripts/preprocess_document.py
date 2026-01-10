@@ -43,9 +43,304 @@ try:
 except (ImportError, ModuleNotFoundError):
     HAS_SIMHASH = False
 
+try:
+    from state_manager import StateManager
+
+    HAS_STATE_MANAGER = True
+except ImportError:
+    HAS_STATE_MANAGER = False
+
 
 # Global fingerprint registry for deduplication (in-memory across processing)
 _FINGERPRINT_REGISTRY = {}
+
+# Entity extraction patterns
+ENTITY_PATTERNS = {
+    "company": [
+        # Common tech companies
+        r"\b(OpenAI|Microsoft|Google|Apple|Amazon|Meta|Anthropic|DeepMind|NVIDIA|Tesla|IBM|Oracle|Salesforce|Adobe|Intel|AMD|Qualcomm|Samsung|Huawei|Alibaba|Tencent|Baidu|ByteDance)\b",
+        # Generic company patterns
+        r"\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)\s+(?:Inc\.|Corp\.|LLC|Ltd\.?|Company|Co\.|Corporation|Group|Holdings)\b",
+    ],
+    "technology": [
+        r"\b(GPT-[0-9]+|GPT[0-9]+|BERT|Transformer|LLM|CNN|RNN|LSTM|GAN|VAE|ViT|CLIP|DALL[-·]?E|Stable Diffusion|Midjourney|Claude|Gemini|PaLM|LLaMA|Mistral|ChatGPT|Copilot)\b",
+        r"\b(Machine Learning|Deep Learning|Neural Network|Natural Language Processing|NLP|Computer Vision|Reinforcement Learning|AI|Artificial Intelligence)\b",
+    ],
+    "product": [
+        r"\b(ChatGPT|GitHub Copilot|Bing Chat|Google Bard|Claude AI|Gemini Pro|GPT-4 Turbo)\b",
+    ],
+    "person": [
+        r"\b(Sam Altman|Satya Nadella|Sundar Pichai|Elon Musk|Mark Zuckerberg|Dario Amodei|Demis Hassabis|Jensen Huang|Tim Cook|Jeff Bezos)\b",
+    ],
+    "market": [
+        r"\b(AI (?:in )?Healthcare|FinTech|EdTech|AdTech|RegTech|InsurTech|HealthTech|BioTech|CleanTech|AgTech|FoodTech|PropTech|LegalTech|MarTech|HRTech|RetailTech)\b",
+        r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)* Market)\b",
+    ],
+}
+
+RELATION_PATTERNS = {
+    "invests_in": [
+        r"(\w+(?:\s+\w+)?)\s+invest(?:ed|s|ing)?\s+(?:\$[\d.]+\s*(?:billion|million|B|M))?\s*in\s+(\w+(?:\s+\w+)?)",
+        r"(\w+(?:\s+\w+)?)\s+(?:led|participated in)\s+(?:a\s+)?(?:\$[\d.]+\s*(?:billion|million|B|M)\s+)?(?:funding|investment)\s+(?:round\s+)?(?:in|for)\s+(\w+(?:\s+\w+)?)",
+    ],
+    "competes_with": [
+        r"(\w+(?:\s+\w+)?)\s+compet(?:es|ing|ed)\s+with\s+(\w+(?:\s+\w+)?)",
+        r"(\w+(?:\s+\w+)?)\s+(?:is|are)\s+(?:a\s+)?(?:rival|competitor)(?:s)?\s+(?:of|to)\s+(\w+(?:\s+\w+)?)",
+    ],
+    "partners_with": [
+        r"(\w+(?:\s+\w+)?)\s+partner(?:ed|s|ing)?\s+with\s+(\w+(?:\s+\w+)?)",
+        r"(\w+(?:\s+\w+)?)\s+(?:announced|formed|entered)\s+(?:a\s+)?partnership\s+with\s+(\w+(?:\s+\w+)?)",
+    ],
+    "uses": [
+        r"(\w+(?:\s+\w+)?)\s+(?:uses|using|powered by|built on|leverages)\s+(\w+(?:\s+\w+)?)",
+    ],
+    "created_by": [
+        r"(\w+(?:\s+\w+)?)\s+(?:was\s+)?(?:created|developed|built|made)\s+by\s+(\w+(?:\s+\w+)?)",
+    ],
+    "acquired": [
+        r"(\w+(?:\s+\w+)?)\s+acquir(?:ed|es|ing)\s+(\w+(?:\s+\w+)?)",
+        r"(\w+(?:\s+\w+)?)\s+(?:bought|purchased)\s+(\w+(?:\s+\w+)?)",
+    ],
+}
+
+
+def extract_entities(text: str) -> dict:
+    """Extract named entities from text using pattern matching.
+
+    Args:
+        text: Document text to extract entities from
+
+    Returns:
+        Dictionary with entities by type and mention counts
+    """
+    entities = {}
+    mention_counts = {}
+
+    for entity_type, patterns in ENTITY_PATTERNS.items():
+        for pattern in patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            for match in matches:
+                # Handle tuple matches from groups
+                name = match if isinstance(match, str) else match[0]
+                name = name.strip()
+
+                # Skip very short or generic matches
+                if len(name) < 2 or name.lower() in ["the", "a", "an", "is", "are"]:
+                    continue
+
+                # Normalize name
+                normalized = name.title() if len(name) > 3 else name.upper()
+
+                if normalized not in entities:
+                    entities[normalized] = {
+                        "name": normalized,
+                        "type": entity_type,
+                        "aliases": set(),
+                        "mention_count": 0,
+                    }
+
+                entities[normalized]["mention_count"] += 1
+                if name != normalized:
+                    entities[normalized]["aliases"].add(name)
+
+    # Convert sets to lists for JSON serialization
+    for entity in entities.values():
+        entity["aliases"] = list(entity["aliases"])
+
+    return entities
+
+
+def extract_relations(text: str, entities: dict) -> list:
+    """Extract relationships between entities from text.
+
+    Args:
+        text: Document text to extract relations from
+        entities: Dictionary of known entities
+
+    Returns:
+        List of relationship tuples (source, target, relation_type, evidence)
+    """
+    relations = []
+    entity_names = set(entities.keys())
+
+    for relation_type, patterns in RELATION_PATTERNS.items():
+        for pattern in patterns:
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                groups = match.groups()
+                if len(groups) >= 2:
+                    source = groups[0].strip().title()
+                    target = groups[1].strip().title()
+
+                    # Only include if at least one is a known entity
+                    source_known = source in entity_names or any(
+                        source.lower() in e.lower() for e in entity_names
+                    )
+                    target_known = target in entity_names or any(
+                        target.lower() in e.lower() for e in entity_names
+                    )
+
+                    if source_known or target_known:
+                        # Get context (surrounding text)
+                        start = max(0, match.start() - 50)
+                        end = min(len(text), match.end() + 50)
+                        evidence = text[start:end].strip()
+
+                        relations.append({
+                            "source": source,
+                            "target": target,
+                            "relation": relation_type,
+                            "evidence": evidence,
+                            "confidence": 0.7 if source_known and target_known else 0.5,
+                        })
+
+    return relations
+
+
+def extract_cooccurrences(text: str, entities: dict, window_size: int = 200) -> list:
+    """Extract co-occurrences of entities within text windows.
+
+    Args:
+        text: Document text
+        entities: Dictionary of known entities
+        window_size: Character window size for co-occurrence detection
+
+    Returns:
+        List of co-occurrence records
+    """
+    cooccurrences = {}
+    entity_names = list(entities.keys())
+
+    # Find all entity positions
+    entity_positions = []
+    for name in entity_names:
+        for match in re.finditer(re.escape(name), text, re.IGNORECASE):
+            entity_positions.append((match.start(), match.end(), name))
+
+    # Sort by position
+    entity_positions.sort(key=lambda x: x[0])
+
+    # Find co-occurrences within window
+    for i, (start_a, end_a, name_a) in enumerate(entity_positions):
+        for start_b, end_b, name_b in entity_positions[i + 1:]:
+            if start_b - end_a > window_size:
+                break
+
+            if name_a != name_b:
+                pair = tuple(sorted([name_a, name_b]))
+                if pair not in cooccurrences:
+                    cooccurrences[pair] = {
+                        "entity_a": pair[0],
+                        "entity_b": pair[1],
+                        "count": 0,
+                        "contexts": [],
+                    }
+
+                cooccurrences[pair]["count"] += 1
+                if len(cooccurrences[pair]["contexts"]) < 3:
+                    context_start = max(0, start_a - 20)
+                    context_end = min(len(text), end_b + 20)
+                    context = text[context_start:context_end].strip()
+                    if context not in cooccurrences[pair]["contexts"]:
+                        cooccurrences[pair]["contexts"].append(context)
+
+    return list(cooccurrences.values())
+
+
+def save_entity_extraction(
+    session_id: str,
+    entities: dict,
+    relations: list,
+    cooccurrences: list,
+    output_dir: Path,
+    db_path: str = None,
+) -> dict:
+    """Save extracted entities to files and optionally to database.
+
+    Args:
+        session_id: Research session ID
+        entities: Extracted entities
+        relations: Extracted relations
+        cooccurrences: Extracted co-occurrences
+        output_dir: Directory to save JSON files
+        db_path: Optional path to SQLite database
+
+    Returns:
+        Summary of saved data
+    """
+    output_dir = Path(output_dir)
+    entity_graph_dir = output_dir / "entity_graph"
+    entity_graph_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save to JSON files
+    entities_file = entity_graph_dir / "entities.json"
+    edges_file = entity_graph_dir / "edges.json"
+    cooccurrences_file = entity_graph_dir / "cooccurrences.json"
+
+    with open(entities_file, "w", encoding="utf-8") as f:
+        json.dump({
+            "session_id": session_id,
+            "entities": list(entities.values()),
+        }, f, indent=2, ensure_ascii=False)
+
+    with open(edges_file, "w", encoding="utf-8") as f:
+        json.dump({
+            "session_id": session_id,
+            "edges": relations,
+        }, f, indent=2, ensure_ascii=False)
+
+    with open(cooccurrences_file, "w", encoding="utf-8") as f:
+        json.dump({
+            "session_id": session_id,
+            "cooccurrences": cooccurrences,
+        }, f, indent=2, ensure_ascii=False)
+
+    # Optionally save to database
+    db_saved = False
+    if HAS_STATE_MANAGER and db_path:
+        try:
+            sm = StateManager(db_path)
+            entity_id_map = {}
+
+            # Create entities
+            for entity in entities.values():
+                entity_id = sm.create_entity(
+                    session_id=session_id,
+                    name=entity["name"],
+                    entity_type=entity["type"],
+                )
+                entity_id_map[entity["name"]] = entity_id
+
+                # Add aliases
+                for alias in entity.get("aliases", []):
+                    sm.add_entity_alias(entity["name"], alias)
+
+            # Create edges
+            for rel in relations:
+                source_id = entity_id_map.get(rel["source"])
+                target_id = entity_id_map.get(rel["target"])
+
+                if source_id and target_id:
+                    sm.create_entity_edge(
+                        session_id=session_id,
+                        source_entity_id=source_id,
+                        target_entity_id=target_id,
+                        relation_type=rel["relation"],
+                        confidence=rel.get("confidence", 0.5),
+                        evidence=rel.get("evidence"),
+                    )
+
+            db_saved = True
+        except Exception as e:
+            print(f"Warning: Failed to save to database: {e}", file=sys.stderr)
+
+    return {
+        "entities_count": len(entities),
+        "relations_count": len(relations),
+        "cooccurrences_count": len(cooccurrences),
+        "files_saved": [str(entities_file), str(edges_file), str(cooccurrences_file)],
+        "db_saved": db_saved,
+    }
 
 
 def convert_table_to_markdown(table_element) -> str:
@@ -411,6 +706,47 @@ date: {metadata.get("date", "")}
             "duplicate_of": dedup_result["original_url"],
         }
 
+    # Entity extraction
+    entity_result = None
+    try:
+        entities = extract_entities(cleaned_text)
+        if entities:
+            relations = extract_relations(cleaned_text, entities)
+            cooccurrences = extract_cooccurrences(cleaned_text, entities)
+
+            # Determine data directory for entity graph output
+            try:
+                parts = input_path.parts
+                raw_idx = parts.index("raw")
+                data_dir = Path(*parts[:raw_idx])
+            except ValueError:
+                data_dir = processed_dir.parent
+
+            # Try to extract session_id from path (RESEARCH/<topic>/data/...)
+            try:
+                research_idx = parts.index("RESEARCH")
+                session_id = parts[research_idx + 1] if research_idx + 1 < len(parts) else "unknown"
+            except ValueError:
+                session_id = "unknown"
+
+            entity_result = {
+                "entities_count": len(entities),
+                "relations_count": len(relations),
+                "cooccurrences_count": len(cooccurrences),
+            }
+
+            # Save entity extraction results
+            if entities:
+                save_entity_extraction(
+                    session_id=session_id,
+                    entities=entities,
+                    relations=relations,
+                    cooccurrences=cooccurrences,
+                    output_dir=data_dir,
+                )
+    except Exception as e:
+        entity_result = {"error": str(e)}
+
     return {
         "status": "success",
         "input_path": str(input_path),
@@ -423,6 +759,7 @@ date: {metadata.get("date", "")}
         ),
         "doc_type": doc_type,
         "content_hash": dedup_result["fingerprint"],
+        "entity_extraction": entity_result,
     }
 
 

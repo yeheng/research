@@ -559,6 +559,152 @@ If no template applies, use this general structure:
 - [ ] Uncertainties and limitations are explicit
 - [ ] No new claims are introduced without sources
 
+## Graph Traversal for Entity-Aware Synthesis
+
+**Purpose**: Leverage the entity relationship graph to discover hidden connections and enrich synthesis with relationship context.
+
+### When to Use Graph Traversal
+
+Use graph traversal when:
+- Writing competitive analysis sections
+- Analyzing market ecosystems
+- Tracing technology dependencies
+- Identifying hidden connections between entities
+
+### Graph Traversal Workflow
+
+**Step 1: Load Entity Graph**
+
+```bash
+# Query entities related to a specific topic
+python3 scripts/entity_graph.py query <session_id> --entity "OpenAI" --depth 2
+
+# Get entities by relation type
+python3 scripts/entity_graph.py related <session_id> "OpenAI" --relation "competes_with"
+
+# Export graph for visualization
+python3 scripts/entity_graph.py export <session_id> --format md
+```
+
+**Step 2: Enrich Sections with Relationship Context**
+
+```markdown
+# Instead of:
+"OpenAI is a major AI company."
+
+# Use graph-enriched synthesis:
+"OpenAI, backed by Microsoft (investor relationship, confidence: 0.95),
+competes directly with Google's DeepMind and Anthropic in the large
+language model space. The company's ChatGPT product uses GPT-4 technology
+(dependency relationship), which builds upon the Transformer architecture."
+```
+
+**Step 3: Multi-Hop Relationship Discovery**
+
+```bash
+# 2-hop query: Find entities connected through intermediate nodes
+python3 scripts/entity_graph.py query <session_id> --entity "GPT-4" --depth 2
+
+# This reveals:
+# GPT-4 → (created_by) → OpenAI → (invested_in) → Microsoft
+# GPT-4 → (based_on) → Transformer → (used_by) → BERT, PaLM, LLaMA
+```
+
+### Graph-Enhanced Section Templates
+
+**Competitive Analysis Section**:
+
+```markdown
+## Competitive Landscape
+
+Based on entity relationship analysis:
+
+| Company | Key Competitors | Investment Relationships | Technology Stack |
+|---------|-----------------|-------------------------|------------------|
+| OpenAI | [from graph: competes_with edges] | [from graph: invested_in edges] | [from graph: uses edges] |
+
+**Hidden Connections Discovered**:
+[List relationships found through 2-hop traversal that weren't obvious in text]
+```
+
+**Technology Ecosystem Section**:
+
+```markdown
+## Technology Ecosystem
+
+The following technology dependency graph was extracted from research:
+
+```
+[Technology A]
+├── (based_on) [Foundation Technology]
+├── (uses) [Component 1]
+│   └── (created_by) [Company X]
+└── (competes_with) [Alternative Technology]
+    └── (created_by) [Company Y]
+```
+
+**Key Insights from Graph**:
+1. [Insight derived from relationship patterns]
+2. [Hidden dependency discovered]
+3. [Competitive dynamics revealed]
+```
+
+### Co-occurrence Analysis
+
+**Purpose**: Entities frequently mentioned together often have implicit relationships not captured by explicit extraction.
+
+```bash
+# Get co-occurrence data
+python3 scripts/entity_graph.py cooccurrence <session_id> --min-count 3
+```
+
+**Using Co-occurrence in Synthesis**:
+
+```markdown
+## Emerging Themes
+
+Based on co-occurrence analysis, the following entities are frequently
+discussed together, suggesting thematic connections:
+
+| Entity Pair | Co-occurrence Count | Sample Context |
+|-------------|---------------------|----------------|
+| OpenAI + Microsoft | 12 | "OpenAI, backed by Microsoft..." |
+| GPT-4 + Claude | 8 | "GPT-4 and Claude represent..." |
+
+These co-occurrence patterns suggest [interpretation].
+```
+
+### Integration with Section-Wise Synthesis
+
+When using the Section-Wise Synthesis Strategy (Phase 0), query the entity graph for each section:
+
+```markdown
+For Section 3.1 (Competitive Analysis):
+
+1. Query relevant entities:
+   python3 scripts/entity_graph.py query <session_id> --entity "target_company" --depth 1 --relation "competes_with"
+
+2. Get competitor relationships:
+   python3 scripts/entity_graph.py related <session_id> "target_company" --relation "competes_with"
+
+3. Incorporate graph data into section:
+   - Add relationship context to claims
+   - Include confidence scores from edges
+   - Note hidden connections discovered
+```
+
+### Graph Visualization Output
+
+When generating final reports, include graph visualization:
+
+```bash
+# Generate DOT format for visualization
+python3 scripts/entity_graph.py export <session_id> --format dot > RESEARCH/[topic]/visuals/entity_graph.dot
+
+# Generate Markdown summary
+python3 scripts/entity_graph.py export <session_id> --format md > RESEARCH/[topic]/data/entity_graph_summary.md
+```
+
 ## Synthesis Techniques
 
 ### Technique 1: Thematic Grouping
@@ -819,6 +965,381 @@ You are the **Synthesizer** - you transform raw research data into knowledge. Yo
 **Bad synthesis** = "Here's a list of things the research found."
 
 **Be the former, not the latter.**
+
+## Multi-Perspective Synthesis (Adaptive Granularity)
+
+**Purpose**: Generate multiple report views from the same research data, tailored to different audiences without re-running research.
+
+### Report Perspectives
+
+Based on the same GoT nodes and fact ledger, generate specialized views:
+
+```python
+REPORT_PERSPECTIVES = {
+    "technical": {
+        "name": "Technical Deep Dive",
+        "filename": "technical_deep_dive.md",
+        "audience": "Engineers, developers, technical decision-makers",
+        "focus": ["specs", "code", "benchmarks", "implementation", "architecture"],
+        "depth": "detailed",
+        "fact_filter": ["number", "percentage", "technical_spec"],
+        "sections": [
+            "Technical Overview",
+            "Architecture Analysis",
+            "Implementation Details",
+            "Performance Benchmarks",
+            "Code Examples",
+            "Technical Limitations",
+            "Integration Requirements"
+        ]
+    },
+    "business": {
+        "name": "Business Impact Analysis",
+        "filename": "business_impact.md",
+        "audience": "Executives, investors, business strategists",
+        "focus": ["market_size", "roi", "swot", "competitors", "revenue", "growth"],
+        "depth": "executive",
+        "fact_filter": ["currency", "percentage", "market_data"],
+        "sections": [
+            "Executive Summary",
+            "Market Opportunity",
+            "Competitive Landscape",
+            "Financial Projections",
+            "SWOT Analysis",
+            "Strategic Recommendations",
+            "Risk Assessment"
+        ]
+    },
+    "timeline": {
+        "name": "Historical Timeline & Evolution",
+        "filename": "timeline_view.md",
+        "audience": "Researchers, analysts, historians",
+        "focus": ["dates", "milestones", "versions", "announcements", "evolution"],
+        "depth": "chronological",
+        "fact_filter": ["date", "event", "milestone"],
+        "sections": [
+            "Timeline Overview",
+            "Key Milestones",
+            "Version History",
+            "Market Evolution",
+            "Future Roadmap",
+            "Trend Analysis"
+        ]
+    },
+    "regulatory": {
+        "name": "Regulatory & Compliance Report",
+        "filename": "regulatory_compliance.md",
+        "audience": "Legal teams, compliance officers, policy makers",
+        "focus": ["regulations", "compliance", "standards", "policies", "requirements"],
+        "depth": "comprehensive",
+        "fact_filter": ["regulatory", "legal", "compliance"],
+        "sections": [
+            "Regulatory Overview",
+            "Current Requirements",
+            "Compliance Checklist",
+            "Upcoming Changes",
+            "Risk & Liability",
+            "Recommendations"
+        ]
+    }
+}
+```
+
+### Multi-View Generation Workflow
+
+**Step 1: Determine Applicable Views**
+
+Not all views are relevant for every research topic. Assess applicability:
+
+```markdown
+| Perspective | Applicable When | Skip When |
+|-------------|-----------------|-----------|
+| Technical | Technology/product research | Pure market analysis |
+| Business | Market/competitive analysis | Pure technical specs |
+| Timeline | Historical/evolutionary topics | Static comparisons |
+| Regulatory | Policy/compliance research | Consumer research |
+```
+
+**Step 2: Generate Each View**
+
+For each applicable perspective, synthesize a specialized report:
+
+```bash
+# Query fact ledger with perspective-specific filters
+python3 scripts/fact_ledger.py query <session_id> --value-type currency  # For business view
+python3 scripts/fact_ledger.py query <session_id> --value-type date      # For timeline view
+python3 scripts/fact_ledger.py query <session_id> --value-type technical_spec  # For technical view
+```
+
+**Step 3: Write to views/ Directory**
+
+```bash
+# Create views directory
+mkdir -p RESEARCH/[topic]/views/
+
+# Write each perspective
+Write: RESEARCH/[topic]/views/technical_deep_dive.md
+Write: RESEARCH/[topic]/views/business_impact.md
+Write: RESEARCH/[topic]/views/timeline_view.md
+```
+
+### Multi-View Templates
+
+#### Technical Deep Dive Template
+
+```markdown
+# [Topic]: Technical Deep Dive
+
+**Audience**: Engineers, Developers, Technical Decision-Makers
+**Generated**: [Date]
+
+## 1. Technical Overview
+
+[High-level technical summary with specifications]
+
+## 2. Architecture Analysis
+
+### System Architecture
+[Architecture diagrams and descriptions]
+
+### Key Components
+| Component | Function | Technology | Status |
+|-----------|----------|------------|--------|
+| [Component 1] | [Function] | [Tech stack] | [Maturity] |
+
+## 3. Implementation Details
+
+### Code Examples
+```[language]
+[Relevant code snippets from research]
+```
+
+### Configuration Requirements
+[Technical setup requirements]
+
+## 4. Performance Benchmarks
+
+| Metric | Value | Source | Conditions |
+|--------|-------|--------|------------|
+| [Metric 1] | [Value] | [Citation] | [Test conditions] |
+
+## 5. Technical Limitations
+
+[Known limitations and constraints from research]
+
+## 6. Integration Requirements
+
+[APIs, dependencies, compatibility requirements]
+
+---
+*Technical specifications extracted from [X] sources. See full_report.md for complete analysis.*
+```
+
+#### Business Impact Template
+
+```markdown
+# [Topic]: Business Impact Analysis
+
+**Audience**: Executives, Investors, Business Strategists
+**Generated**: [Date]
+
+## Executive Summary
+
+[2-3 paragraph business-focused summary]
+
+## 1. Market Opportunity
+
+### Market Size & Growth
+| Metric | 2023 | 2024 (Est.) | 2028 (Proj.) | CAGR |
+|--------|------|-------------|--------------|------|
+| TAM | [Value] | [Value] | [Value] | [%] |
+| SAM | [Value] | [Value] | [Value] | [%] |
+
+[Analysis with citations]
+
+## 2. Competitive Landscape
+
+### Key Players
+| Company | Market Share | Key Strengths | Recent Moves |
+|---------|--------------|---------------|--------------|
+| [Company 1] | [%] | [Strengths] | [News] |
+
+### Porter's Five Forces Summary
+[Analysis based on research findings]
+
+## 3. Financial Projections
+
+[Revenue, cost, ROI analysis from research]
+
+## 4. SWOT Analysis
+
+| Strengths | Weaknesses |
+|-----------|------------|
+| [S1] | [W1] |
+
+| Opportunities | Threats |
+|---------------|---------|
+| [O1] | [T1] |
+
+## 5. Strategic Recommendations
+
+1. **Immediate Actions** (0-6 months)
+   [Recommendations with evidence]
+
+2. **Medium-term Strategy** (6-18 months)
+   [Recommendations with evidence]
+
+## 6. Risk Assessment
+
+| Risk | Probability | Impact | Mitigation |
+|------|-------------|--------|------------|
+| [Risk 1] | High/Med/Low | High/Med/Low | [Strategy] |
+
+---
+*Business insights derived from [X] market reports and [Y] industry sources.*
+```
+
+#### Timeline View Template
+
+```markdown
+# [Topic]: Historical Timeline & Evolution
+
+**Audience**: Researchers, Analysts, Historians
+**Generated**: [Date]
+
+## Timeline Overview
+
+[Visual timeline representation]
+
+```
+2015 ──── 2018 ──── 2020 ──── 2022 ──── 2024 ──── Future
+  │        │         │         │         │         │
+  └ [M1]   └ [M2]    └ [M3]    └ [M4]    └ [M5]   └ [Projected]
+```
+
+## Key Milestones
+
+### [Year 1]: [Era Name]
+
+**[Date]**: [Event Name]
+- **What happened**: [Description]
+- **Significance**: [Impact]
+- **Source**: [Citation]
+
+### [Year 2]: [Era Name]
+
+**[Date]**: [Event Name]
+- **What happened**: [Description]
+- **Significance**: [Impact]
+- **Source**: [Citation]
+
+## Version History
+
+| Version | Release Date | Key Changes | Adoption |
+|---------|--------------|-------------|----------|
+| [v1.0] | [Date] | [Changes] | [Metrics] |
+
+## Market Evolution
+
+[How the market/technology has evolved over time]
+
+## Future Roadmap
+
+### Confirmed
+| Date | Event | Source |
+|------|-------|--------|
+| [Q1 2025] | [Event] | [Citation] |
+
+### Projected
+[Analyst predictions with confidence levels]
+
+## Trend Analysis
+
+[Long-term trends identified from historical data]
+
+---
+*Timeline compiled from [X] historical sources and [Y] news articles.*
+```
+
+### Perspective Selection Logic
+
+When generating multi-view reports, use this decision tree:
+
+```markdown
+IF research_type == "technology_assessment":
+    Generate: technical, business
+    Skip: regulatory (unless compliance mentioned)
+
+IF research_type == "market_research":
+    Generate: business, timeline
+    Skip: technical (unless product-focused)
+
+IF research_type == "policy_analysis":
+    Generate: regulatory, timeline
+    Skip: technical
+
+IF research_type == "comprehensive":
+    Generate: ALL applicable views
+
+IF user_specifies_audience:
+    Generate: ONLY matching perspective
+```
+
+### Integration with Section-Wise Synthesis
+
+When using multi-view generation with section-wise synthesis:
+
+```markdown
+1. Generate full_report.md using standard section-wise approach
+2. For each perspective:
+   a. Query fact ledger with perspective-specific filters
+   b. Extract relevant sections from full_report.md
+   c. Reframe content for target audience
+   d. Write to views/[perspective].md
+```
+
+### Output Structure with Views
+
+```
+RESEARCH/[topic]/
+├── README.md                    # Overview with links to all views
+├── executive_summary.md         # Universal summary
+├── full_report.md               # Complete analysis
+├── views/                       # NEW: Multi-perspective views
+│   ├── technical_deep_dive.md   # For engineers
+│   ├── business_impact.md       # For executives
+│   ├── timeline_view.md         # For analysts
+│   └── regulatory_compliance.md # For legal (if applicable)
+├── data/
+│   ├── statistics.md
+│   ├── key_facts.md
+│   └── fact_ledger/
+├── sources/
+│   ├── bibliography.md
+│   └── source_quality_table.md
+└── research_notes/
+    └── agent_findings_summary.md
+```
+
+### README.md Update for Multi-View
+
+When views are generated, update README.md:
+
+```markdown
+## Available Views
+
+This research is available in multiple formats for different audiences:
+
+| View | Audience | Description | Link |
+|------|----------|-------------|------|
+| **Full Report** | All | Complete analysis | [full_report.md](full_report.md) |
+| **Executive Summary** | Quick reference | Key findings | [executive_summary.md](executive_summary.md) |
+| **Technical Deep Dive** | Engineers | Specs & implementation | [views/technical_deep_dive.md](views/technical_deep_dive.md) |
+| **Business Impact** | Executives | Market & strategy | [views/business_impact.md](views/business_impact.md) |
+| **Timeline** | Analysts | Historical evolution | [views/timeline_view.md](views/timeline_view.md) |
+
+Choose the view that best matches your needs.
+```
 
 ## Standard Skill Output Format
 

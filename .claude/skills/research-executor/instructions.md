@@ -19,6 +19,89 @@ The question has already been refined by the `question-refiner` skill. You will 
 
 **Your job**: Verify the structured prompt is complete and ask for clarification if any critical information is missing.
 
+### Phase 1.5: Ontology Construction (NEW - Dynamic Domain Mapping)
+
+**Purpose**: Before decomposing research questions, map the domain's conceptual landscape to ensure subtopics are grounded in actual domain terminology rather than generic assumptions.
+
+**When to Use**:
+- Unfamiliar or highly specialized domains
+- Rapidly evolving fields with new terminology
+- Cross-domain research spanning multiple disciplines
+- When user expresses uncertainty about scope
+
+**Process**:
+
+1. **Invoke Ontology Scout**:
+
+```markdown
+Use the ontology-scout skill to:
+1. Perform quick breadth-first reconnaissance (5 minutes max)
+2. Extract domain-specific terminology
+3. Build hierarchical taxonomy (3 levels max)
+4. Identify knowledge gaps
+```
+
+2. **Generate Domain Taxonomy**:
+
+```json
+{
+  "domain": "[Research Topic]",
+  "taxonomy": {
+    "[Category 1]": {
+      "[Subcategory 1.1]": ["term1", "term2"],
+      "[Subcategory 1.2]": ["term3", "term4"]
+    },
+    "[Category 2]": {
+      "[Subcategory 2.1]": ["term5", "term6"]
+    }
+  },
+  "key_entities": {
+    "companies": [],
+    "technologies": [],
+    "standards": []
+  },
+  "suggested_subtopics": []
+}
+```
+
+3. **User Validation**:
+
+```markdown
+Present taxonomy to user:
+- Show hierarchical structure
+- Highlight key terminology
+- Suggest focus areas
+- Request feedback on accuracy and relevance
+```
+
+4. **Refinement**:
+
+Based on user feedback:
+- Update taxonomy with corrections
+- Prioritize selected branches
+- Exclude irrelevant areas
+- Generate refined subtopic list for Phase 2
+
+**Output**:
+
+Save to `RESEARCH/[topic]/data/ontology/taxonomy.json`
+
+**Decision Logic**:
+
+```markdown
+If domain is familiar AND user has clear scope:
+  → Skip Phase 1.5, proceed to Phase 2
+
+If domain is unfamiliar OR specialized OR user uncertain:
+  → Execute Phase 1.5
+  → Use taxonomy to inform Phase 2 subtopic decomposition
+
+If ontology scout returns low confidence:
+  → Flag for user review
+  → Suggest clarifying questions
+  → May need to refine original research question
+```
+
 ### Phase 2: Retrieval Planning
 
 Break down the main research question into actionable subtopics and create a research plan.
@@ -804,16 +887,32 @@ Create a folder in the output directory:
     ├── README.md (Overview and navigation guide)
     ├── executive_summary.md (1-2 page summary)
     ├── full_report.md (Comprehensive findings)
+    ├── views/                               # NEW: Multi-perspective views
+    │   ├── technical_deep_dive.md           # For engineers/developers
+    │   ├── business_impact.md               # For executives/investors
+    │   ├── timeline_view.md                 # For analysts/historians
+    │   └── regulatory_compliance.md         # For legal (if applicable)
     ├── data/
     │   ├── statistics.md
-    │   └── key_facts.md
+    │   ├── key_facts.md
+    │   ├── fact_ledger/                     # Atomic fact storage
+    │   │   ├── facts.json
+    │   │   ├── conflicts.json
+    │   │   └── key_statistics.md
+    │   ├── ontology/                        # Domain taxonomy
+    │   │   └── taxonomy.json
+    │   └── entity_graph/                    # Entity relationships
+    │       └── entity_graph_summary.md
     ├── visuals/
-    │   └── descriptions.md (describe charts/graphs that could be created)
+    │   ├── descriptions.md (describe charts/graphs that could be created)
+    │   └── entity_graph.dot (graph visualization)
     ├── sources/
     │   ├── bibliography.md (Full citations)
     │   └── source_quality_table.md (A-E ratings)
     ├── research_notes/
-    │   └── agent_findings_summary.md
+    │   ├── agent_findings_summary.md
+    │   ├── ontology_scout.md
+    │   └── red_team_findings.json
     └── appendices/
         ├── methodology.md
         └── limitations.md
@@ -838,6 +937,18 @@ This report contains comprehensive research on [topic], conducted on [date].
 ## Quick Start
 Read the [Executive Summary](executive_summary.md) for key findings.
 Refer to the [Full Report](full_report.md) for detailed analysis.
+
+## Available Views
+
+This research is available in multiple formats for different audiences:
+
+| View | Audience | Description | Link |
+|------|----------|-------------|------|
+| **Full Report** | All | Complete analysis | [full_report.md](full_report.md) |
+| **Executive Summary** | Quick reference | Key findings | [executive_summary.md](executive_summary.md) |
+| **Technical Deep Dive** | Engineers | Specs & implementation | [views/technical_deep_dive.md](views/technical_deep_dive.md) |
+| **Business Impact** | Executives | Market & strategy | [views/business_impact.md](views/business_impact.md) |
+| **Timeline** | Analysts | Historical evolution | [views/timeline_view.md](views/timeline_view.md) |
 
 ## Research Quality
 - **Total Sources**: [number]
