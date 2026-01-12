@@ -5,6 +5,9 @@
  * Ported from .claude/skills/entity-extractor
  */
 
+import { logger } from '../utils/logger.js';
+import { ValidationError, ProcessingError } from '../utils/errors.js';
+
 interface EntityObject {
   name: string;
   type: string;
@@ -30,9 +33,27 @@ interface EntityExtractInput {
  * Extract entities and relationships from text
  */
 export async function entityExtract(input: EntityExtractInput): Promise<any> {
+  const startTime = Date.now();
+
+  logger.info('Starting entity extraction', {
+    textLength: input.text?.length,
+    extractRelations: input.extract_relations,
+  });
+
   try {
+    // Validate input
+    if (!input.text || typeof input.text !== 'string') {
+      throw new ValidationError('Text input is required and must be a string');
+    }
+
     const entities = extractEntities(input.text, input.entity_types);
     const edges = input.extract_relations ? extractRelationships(input.text, entities) : [];
+
+    logger.info('Entity extraction completed', {
+      entitiesFound: entities.length,
+      relationshipsFound: edges.length,
+      processingTimeMs: Date.now() - startTime,
+    });
 
     return {
       content: [
@@ -50,7 +71,15 @@ export async function entityExtract(input: EntityExtractInput): Promise<any> {
       ],
     };
   } catch (error) {
-    throw new Error(`Entity extraction failed: ${error}`);
+    logger.error('Entity extraction failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    if (error instanceof ValidationError || error instanceof ProcessingError) {
+      throw error;
+    }
+
+    throw new ProcessingError(`Entity extraction failed: ${error}`);
   }
 }
 

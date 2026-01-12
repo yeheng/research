@@ -5,6 +5,9 @@
  * Ported from .claude/skills/citation-validator
  */
 
+import { logger } from '../utils/logger.js';
+import { ValidationError } from '../utils/errors.js';
+
 interface CitationObject {
   claim: string;
   author?: string;

@@ -9,6 +9,17 @@
  * - citation-validate: Validate citations
  * - source-rate: Rate source quality
  * - conflict-detect: Detect fact conflicts
+ *
+ * Batch processing tools (Phase 3B):
+ * - batch-fact-extract: Process multiple texts in parallel
+ * - batch-entity-extract: Extract from multiple texts
+ * - batch-citation-validate: Validate multiple citations
+ * - batch-source-rate: Rate multiple sources
+ * - batch-conflict-detect: Detect conflicts in batches
+ *
+ * Cache management:
+ * - cache-stats: Get cache statistics
+ * - cache-clear: Clear all caches
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -25,11 +36,22 @@ import { citationValidate } from './tools/citation-validate.js';
 import { sourceRate } from './tools/source-rate.js';
 import { conflictDetect } from './tools/conflict-detect.js';
 
+// Batch tools
+import {
+  batchFactExtract,
+  batchEntityExtract,
+  batchCitationValidate,
+  batchSourceRate,
+  batchConflictDetect,
+  getCacheStats,
+  clearAllCaches,
+} from './tools/batch-tools.js';
+
 // Create server instance
 const server = new Server(
   {
     name: 'deep-research-mcp-server',
-    version: '1.0.0',
+    version: '2.0.0',
   },
   {
     capabilities: {
@@ -38,10 +60,40 @@ const server = new Server(
   }
 );
 
+// Batch input schema (shared)
+const batchInputSchema = {
+  type: 'object',
+  properties: {
+    items: {
+      type: 'array',
+      description: 'Array of items to process',
+    },
+    options: {
+      type: 'object',
+      properties: {
+        maxConcurrency: {
+          type: 'number',
+          description: 'Maximum parallel operations (default: 5)',
+        },
+        useCache: {
+          type: 'boolean',
+          description: 'Use caching to skip duplicates (default: true)',
+        },
+        stopOnError: {
+          type: 'boolean',
+          description: 'Stop on first error (default: false)',
+        },
+      },
+    },
+  },
+  required: ['items'],
+};
+
 // List available tools
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
+      // === Core Tools ===
       {
         name: 'fact-extract',
         description: 'Extract atomic facts from text with source attribution',
@@ -114,6 +166,49 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['facts'],
         },
       },
+      // === Batch Processing Tools ===
+      {
+        name: 'batch-fact-extract',
+        description: 'Process multiple texts for fact extraction in parallel with caching',
+        inputSchema: batchInputSchema,
+      },
+      {
+        name: 'batch-entity-extract',
+        description: 'Extract entities from multiple texts in parallel with caching',
+        inputSchema: batchInputSchema,
+      },
+      {
+        name: 'batch-citation-validate',
+        description: 'Validate multiple citations in parallel with caching',
+        inputSchema: batchInputSchema,
+      },
+      {
+        name: 'batch-source-rate',
+        description: 'Rate multiple sources in parallel with caching',
+        inputSchema: batchInputSchema,
+      },
+      {
+        name: 'batch-conflict-detect',
+        description: 'Detect conflicts in multiple fact sets in parallel',
+        inputSchema: batchInputSchema,
+      },
+      // === Cache Management Tools ===
+      {
+        name: 'cache-stats',
+        description: 'Get cache statistics (hits, misses, hit rate) for all tool caches',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'cache-clear',
+        description: 'Clear all tool caches',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
     ],
   };
 });
@@ -124,20 +219,44 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
+      // Core tools
       case 'fact-extract':
-        return await factExtract(args);
+        return await factExtract(args as any);
 
       case 'entity-extract':
-        return await entityExtract(args);
+        return await entityExtract(args as any);
 
       case 'citation-validate':
-        return await citationValidate(args);
+        return await citationValidate(args as any);
 
       case 'source-rate':
-        return await sourceRate(args);
+        return await sourceRate(args as any);
 
       case 'conflict-detect':
-        return await conflictDetect(args);
+        return await conflictDetect(args as any);
+
+      // Batch tools
+      case 'batch-fact-extract':
+        return await batchFactExtract(args as any);
+
+      case 'batch-entity-extract':
+        return await batchEntityExtract(args as any);
+
+      case 'batch-citation-validate':
+        return await batchCitationValidate(args as any);
+
+      case 'batch-source-rate':
+        return await batchSourceRate(args as any);
+
+      case 'batch-conflict-detect':
+        return await batchConflictDetect(args as any);
+
+      // Cache management
+      case 'cache-stats':
+        return await getCacheStats();
+
+      case 'cache-clear':
+        return await clearAllCaches();
 
       default:
         throw new Error(`Unknown tool: ${name}`);
@@ -160,7 +279,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('Deep Research MCP Server running on stdio');
+  console.error('Deep Research MCP Server v2.0.0 running on stdio');
 }
 
 main().catch((error) => {

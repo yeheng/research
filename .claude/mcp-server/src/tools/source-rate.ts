@@ -5,6 +5,9 @@
  * Extracted from citation-validator
  */
 
+import { logger } from '../utils/logger.js';
+import { ValidationError } from '../utils/errors.js';
+
 interface SourceRateInput {
   source_url: string;
   source_type?: 'academic' | 'industry' | 'news' | 'blog' | 'official';

@@ -5,6 +5,9 @@
  * Ported from .claude/skills/fact-extractor
  */
 
+import { logger } from '../utils/logger.js';
+import { ValidationError, ProcessingError } from '../utils/errors.js';
+
 interface SourceObject {
   url?: string;
   title?: string;
@@ -43,7 +46,23 @@ interface FactExtractOutput {
 export async function factExtract(input: FactExtractInput): Promise<any> {
   const startTime = Date.now();
 
+  logger.info('Starting fact extraction', {
+    textLength: input.text?.length,
+    hasSourceUrl: !!input.source_url,
+  });
+
   try {
+    // Validate input
+    if (!input.text || typeof input.text !== 'string') {
+      throw new ValidationError('Text input is required and must be a string', {
+        receivedType: typeof input.text,
+      });
+    }
+
+    if (input.text.length === 0) {
+      throw new ValidationError('Text input cannot be empty');
+    }
+
     const facts = await extractFactsFromText(
       input.text,
       input.source_url,
@@ -51,6 +70,11 @@ export async function factExtract(input: FactExtractInput): Promise<any> {
     );
 
     const processingTime = Date.now() - startTime;
+
+    logger.info('Fact extraction completed', {
+      factsExtracted: facts.length,
+      processingTimeMs: processingTime,
+    });
 
     return {
       content: [
@@ -68,7 +92,18 @@ export async function factExtract(input: FactExtractInput): Promise<any> {
       ],
     };
   } catch (error) {
-    throw new Error(`Fact extraction failed: ${error}`);
+    logger.error('Fact extraction failed', {
+      error: error instanceof Error ? error.message : String(error),
+      processingTimeMs: Date.now() - startTime,
+    });
+
+    if (error instanceof ValidationError || error instanceof ProcessingError) {
+      throw error;
+    }
+
+    throw new ProcessingError(`Fact extraction failed: ${error}`, {
+      originalError: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 

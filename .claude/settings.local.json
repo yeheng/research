@@ -16,7 +16,9 @@
       "mcp__web-reader__webReader",
       "Skill(deep-research)",
       "Skill(research-executor)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(npm run build:*)",
+      "Bash(node test-tools.js:*)"
     ]
   },
   "research": {

@@ -5,6 +5,9 @@
  * Extracted from fact-extractor
  */
 
+import { logger } from '../utils/logger.js';
+import { ValidationError } from '../utils/errors.js';
+
 interface FactInput {
   entity: string;
   attribute: string;
