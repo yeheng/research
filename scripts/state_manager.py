@@ -1,1661 +1,1459 @@
 """
-State Manager - SQLite-based state management for multi-agent research framework.
+Deep Research Framework - Centralized State Manager
+Version: 2.0.0 (Refactored)
 
-Replaces JSON file-based state management to prevent race conditions and enable
-concurrent-safe operations across multiple parallel research agents.
+Provides thread-safe, ACID-compliant state management for:
+- Research sessions with complete lifecycle tracking
+- Graph of Thoughts (GoT) operations and history
+- Research agent coordination and monitoring
+- Fact ledger with source attribution and conflict detection
+- Entity graph with relationships
+- Citations with quality validation
 
-Features:
-- Atomic operations with SQLite transactions
-- Graph of Thoughts (GoT) node management
-- Agent heartbeat tracking
-- Complex queries for synthesis and analysis
+Changes from v1.0:
+- Unified schema using external schema.sql
+- Complete data classes for type safety
+- Enhanced session status tracking
+- Agent lifecycle management (not just heartbeats)
+- Citation quality tracking
+- Improved concurrent access patterns
 """
 
 import sqlite3
 import json
 import threading
-from datetime import datetime
-from typing import Dict, List, Optional, Any
-from pathlib import Path
 from contextlib import contextmanager
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass, asdict, field
+from enum import Enum
 
+
+# ============================================================================
+# Enums and Type Definitions
+# ============================================================================
+
+class ResearchType(Enum):
+    """Type of research being conducted"""
+    DEEP = "deep"
+    QUICK = "quick"
+    CUSTOM = "custom"
+
+
+class SessionStatus(Enum):
+    """Research session lifecycle states"""
+    INITIALIZING = "initializing"
+    PLANNING = "planning"
+    EXECUTING = "executing"
+    SYNTHESIZING = "synthesizing"
+    VALIDATING = "validating"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class NodeType(Enum):
+    """GoT node types"""
+    ROOT = "root"
+    BRANCH = "branch"
+    LEAF = "leaf"
+
+
+class NodeStatus(Enum):
+    """GoT node states"""
+    ACTIVE = "active"
+    PRUNED = "pruned"
+    AGGREGATED = "aggregated"
+    REFINED = "refined"
+
+
+class AgentStatus(Enum):
+    """Research agent lifecycle states"""
+    DEPLOYING = "deploying"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    TIMEOUT = "timeout"
+
+
+class GoTOperation(Enum):
+    """Graph of Thoughts operations"""
+    GENERATE = "Generate"
+    AGGREGATE = "Aggregate"
+    REFINE = "Refine"
+    SCORE = "Score"
+    PRUNE = "Prune"
+
+
+class ValueType(Enum):
+    """Types of fact values"""
+    NUMBER = "number"
+    DATE = "date"
+    PERCENTAGE = "percentage"
+    CURRENCY = "currency"
+    TEXT = "text"
+
+
+class Confidence(Enum):
+    """Confidence levels for facts"""
+    HIGH = "High"
+    MEDIUM = "Medium"
+    LOW = "Low"
+
+
+class SourceQuality(Enum):
+    """Source quality ratings (A-E scale)"""
+    A = "A"  # Peer-reviewed, systematic reviews, RCTs
+    B = "B"  # Cohort studies, clinical guidelines, reputable analysts
+    C = "C"  # Expert opinion, case reports, mechanistic studies
+    D = "D"  # Preprints, preliminary research, industry blogs
+    E = "E"  # Anecdotal, theoretical, speculative
+
+
+class ConflictType(Enum):
+    """Types of fact conflicts"""
+    NUMERICAL = "numerical"
+    TEMPORAL = "temporal"
+    SCOPE = "scope"
+    METHODOLOGICAL = "methodological"
+
+
+class ConflictSeverity(Enum):
+    """Severity levels for conflicts"""
+    CRITICAL = "critical"
+    MODERATE = "moderate"
+    MINOR = "minor"
+
+
+# ============================================================================
+# Data Classes
+# ============================================================================
+
+@dataclass
+class ResearchSession:
+    """Research session with complete metadata"""
+    session_id: str
+    research_topic: str
+    research_type: str = ResearchType.DEEP.value
+    status: str = SessionStatus.INITIALIZING.value
+    structured_prompt: Optional[str] = None
+    research_plan: Optional[str] = None
+    output_directory: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    error_log: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    completed_at: Optional[str] = None
+
+
+@dataclass
+class GoTNode:
+    """Graph of Thoughts node"""
+    node_id: str
+    session_id: str
+    content: str
+    parent_id: Optional[str] = None
+    node_type: str = NodeType.BRANCH.value
+    quality_score: Optional[float] = None
+    depth: int = 0
+    status: str = NodeStatus.ACTIVE.value
+    metadata: Optional[Dict[str, Any]] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+@dataclass
+class ResearchAgent:
+    """Research agent with lifecycle tracking"""
+    agent_id: str
+    session_id: str
+    agent_type: str
+    agent_role: str
+    status: str = AgentStatus.DEPLOYING.value
+    focus_description: Optional[str] = None
+    search_queries: Optional[List[str]] = None
+    output_file: Optional[str] = None
+    token_usage: int = 0
+    error_message: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    deployed_at: Optional[str] = None
+    completed_at: Optional[str] = None
+
+
+@dataclass
+class Fact:
+    """Atomic fact with source attribution"""
+    entity: str
+    attribute: str
+    value: str
+    session_id: str
+    value_type: str = ValueType.TEXT.value
+    confidence: str = Confidence.MEDIUM.value
+    agent_id: Optional[str] = None
+    source_url: Optional[str] = None
+    source_title: Optional[str] = None
+    source_author: Optional[str] = None
+    source_date: Optional[str] = None
+    source_quality: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    fact_id: Optional[int] = None
+    extraction_timestamp: Optional[str] = None
+
+
+@dataclass
+class Entity:
+    """Named entity from research"""
+    entity_name: str
+    entity_type: str
+    session_id: str
+    aliases: Optional[List[str]] = None
+    description: Optional[str] = None
+    mention_count: int = 1
+    metadata: Optional[Dict[str, Any]] = None
+    entity_id: Optional[int] = None
+    first_seen_at: Optional[str] = None
+
+
+@dataclass
+class EntityRelationship:
+    """Relationship between two entities"""
+    source_entity_id: int
+    target_entity_id: int
+    relation_type: str
+    session_id: str
+    confidence: Optional[float] = None
+    evidence: Optional[str] = None
+    source_url: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    relationship_id: Optional[int] = None
+    detected_at: Optional[str] = None
+
+
+@dataclass
+class Citation:
+    """Citation with quality validation"""
+    claim: str
+    session_id: str
+    agent_id: Optional[str] = None
+    author: Optional[str] = None
+    publication_date: Optional[str] = None
+    title: Optional[str] = None
+    url: Optional[str] = None
+    page_numbers: Optional[str] = None
+    quality_rating: Optional[str] = None
+    url_accessible: Optional[bool] = None
+    complete: bool = False
+    metadata: Optional[Dict[str, Any]] = None
+    citation_id: Optional[int] = None
+    validation_timestamp: Optional[str] = None
+
+
+# ============================================================================
+# State Manager
+# ============================================================================
 
 class StateManager:
-    """Thread-safe state manager using SQLite for concurrent agent operations."""
+    """
+    Thread-safe, centralized state management for Deep Research Framework.
 
-    _instance = None
-    _lock = threading.Lock()
+    Features:
+    - ACID-compliant SQLite backend
+    - Thread-safe operations with connection pooling
+    - Automatic timestamp management
+    - JSON serialization for complex types
+    - Comprehensive error handling
+    - External schema management
 
-    def __new__(cls, db_path: str = None):
-        """Singleton pattern to ensure single database connection pool."""
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-        return cls._instance
+    Usage:
+        sm = StateManager()  # Uses default location
+        session = sm.create_session(ResearchSession(...))
+        sm.close()
+    """
 
-    def __init__(self, db_path: str = None):
-        """Initialize state manager with SQLite database.
+    def __init__(self, db_path: Optional[str] = None):
+        """
+        Initialize StateManager.
 
         Args:
-            db_path: Path to SQLite database file. Defaults to .research_state.db
+            db_path: Path to SQLite database file. If None, uses default location.
         """
-        if hasattr(self, "_initialized"):
-            return
+        if db_path is None:
+            project_root = Path(__file__).parent.parent
+            db_path = str(project_root / ".claude" / "mcp-server" / "state" / "research_state.db")
 
-        self.db_path = db_path or str(Path.cwd() / ".research_state.db")
+        self.db_path = Path(db_path)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Thread-local storage for connections
         self._local = threading.local()
+
+        # Initialize database
         self._initialize_database()
-        self._initialized = True
+
+    def _get_connection(self) -> sqlite3.Connection:
+        """Get thread-local database connection."""
+        if not hasattr(self._local, 'connection'):
+            self._local.connection = sqlite3.connect(
+                str(self.db_path),
+                check_same_thread=False,
+                timeout=30.0
+            )
+            self._local.connection.row_factory = sqlite3.Row
+            # Enable foreign keys
+            self._local.connection.execute("PRAGMA foreign_keys = ON")
+            # Enable WAL mode for better concurrent access
+            self._local.connection.execute("PRAGMA journal_mode=WAL")
+        return self._local.connection
 
     @contextmanager
-    def _get_connection(self):
-        """Get thread-local database connection with automatic commit/rollback."""
-        if not hasattr(self._local, "conn"):
-            self._local.conn = sqlite3.connect(
-                self.db_path, check_same_thread=False, timeout=30.0
-            )
-            self._local.conn.row_factory = sqlite3.Row
-            # Enable WAL mode for better concurrent access
-            self._local.conn.execute("PRAGMA journal_mode=WAL")
-            self._local.conn.execute("PRAGMA synchronous=NORMAL")
-
+    def _transaction(self):
+        """Context manager for database transactions."""
+        conn = self._get_connection()
         try:
-            yield self._local.conn
-            self._local.conn.commit()
+            yield conn
+            conn.commit()
         except Exception as e:
-            self._local.conn.rollback()
+            conn.rollback()
             raise e
 
     def _initialize_database(self):
-        """Create database schema if not exists."""
-        with self._get_connection() as conn:
-            # GoT nodes table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS nodes (
-                    id TEXT PRIMARY KEY,
-                    parent_id TEXT,
-                    content TEXT NOT NULL,
-                    score REAL DEFAULT 0.0,
-                    status TEXT DEFAULT 'pending',
-                    depth INTEGER DEFAULT 0,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    meta TEXT,
-                    FOREIGN KEY (parent_id) REFERENCES nodes(id)
-                )
-            """)
+        """Initialize database with schema from schema.sql."""
+        schema_path = self.db_path.parent / "schema.sql"
 
-            # Agent heartbeats table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS agent_heartbeats (
-                    agent_id TEXT PRIMARY KEY,
-                    last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    current_action TEXT,
-                    status TEXT DEFAULT 'active',
-                    meta TEXT
-                )
-            """)
+        if not schema_path.exists():
+            raise FileNotFoundError(
+                f"Schema file not found at {schema_path}. "
+                "Please ensure schema.sql is in the same directory as the database."
+            )
 
-            # Research sessions table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS research_sessions (
-                    session_id TEXT PRIMARY KEY,
-                    topic TEXT NOT NULL,
-                    status TEXT DEFAULT 'active',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    completed_at TIMESTAMP,
-                    meta TEXT
-                )
-            """)
+        with open(schema_path, 'r') as f:
+            schema_sql = f.read()
 
-            # Create indexes for performance
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_nodes_parent
-                ON nodes(parent_id)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_nodes_status
-                ON nodes(status)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_nodes_score
-                ON nodes(score DESC)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_agent_status
-                ON agent_heartbeats(status)
-            """)
+        with self._transaction() as conn:
+            conn.executescript(schema_sql)
 
-            # ==================== Fact Ledger Tables ====================
-            # Atomic facts storage (Optimization #1)
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS facts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT NOT NULL,
-                    entity TEXT NOT NULL,
-                    attribute TEXT NOT NULL,
-                    value TEXT NOT NULL,
-                    value_type TEXT DEFAULT 'text',
-                    value_numeric REAL,
-                    unit TEXT,
-                    confidence TEXT CHECK(confidence IN ('High', 'Medium', 'Low')) DEFAULT 'Medium',
-                    context TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (session_id) REFERENCES research_sessions(session_id)
-                )
-            """)
+    def close(self):
+        """Close database connection."""
+        if hasattr(self._local, 'connection'):
+            self._local.connection.close()
+            delattr(self._local, 'connection')
 
-            # Fact-source links (many-to-many)
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS fact_sources (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    fact_id INTEGER NOT NULL,
-                    source_url TEXT NOT NULL,
-                    source_title TEXT,
-                    source_author TEXT,
-                    source_date TEXT,
-                    source_quality TEXT CHECK(source_quality IN ('A', 'B', 'C', 'D', 'E')),
-                    page_number TEXT,
-                    excerpt TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (fact_id) REFERENCES facts(id) ON DELETE CASCADE
-                )
-            """)
+    def _row_to_dict(self, row: sqlite3.Row) -> Dict[str, Any]:
+        """Convert SQLite row to dictionary with JSON parsing."""
+        result = dict(row)
 
-            # Fact conflicts tracking
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS fact_conflicts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    fact_id_a INTEGER NOT NULL,
-                    fact_id_b INTEGER NOT NULL,
-                    conflict_type TEXT CHECK(conflict_type IN ('numerical', 'temporal', 'causal', 'scope', 'methodological')),
-                    severity TEXT CHECK(severity IN ('critical', 'moderate', 'minor')),
-                    description TEXT,
-                    resolution TEXT,
-                    resolved_at TIMESTAMP,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (fact_id_a) REFERENCES facts(id) ON DELETE CASCADE,
-                    FOREIGN KEY (fact_id_b) REFERENCES facts(id) ON DELETE CASCADE
-                )
-            """)
+        # Parse JSON fields
+        json_fields = ['metadata']
+        for field in json_fields:
+            if field in result and result[field]:
+                try:
+                    result[field] = json.loads(result[field])
+                except (json.JSONDecodeError, TypeError):
+                    result[field] = None
 
-            # ==================== Entity Graph Tables (Optimization #2) ====================
-            # Entities table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS entities (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT,
-                    name TEXT NOT NULL,
-                    entity_type TEXT,
-                    description TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+        return result
 
-            # Entity aliases for normalization
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS entity_aliases (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    canonical_name TEXT NOT NULL,
-                    alias TEXT NOT NULL UNIQUE
-                )
-            """)
+    # ========================================================================
+    # Research Session Operations
+    # ========================================================================
 
-            # Entity relationship edges
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS entity_edges (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT,
-                    source_entity_id INTEGER NOT NULL,
-                    target_entity_id INTEGER NOT NULL,
-                    relation_type TEXT,
-                    confidence REAL DEFAULT 0.5,
-                    evidence TEXT,
-                    source_url TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (source_entity_id) REFERENCES entities(id) ON DELETE CASCADE,
-                    FOREIGN KEY (target_entity_id) REFERENCES entities(id) ON DELETE CASCADE
-                )
-            """)
-
-            # Entity co-occurrence records
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS entity_cooccurrence (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    entity_a_id INTEGER NOT NULL,
-                    entity_b_id INTEGER NOT NULL,
-                    cooccurrence_count INTEGER DEFAULT 1,
-                    context_snippets TEXT,
-                    FOREIGN KEY (entity_a_id) REFERENCES entities(id) ON DELETE CASCADE,
-                    FOREIGN KEY (entity_b_id) REFERENCES entities(id) ON DELETE CASCADE
-                )
-            """)
-
-            # ==================== Interrupt Events Table (Optimization #4) ====================
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS interrupt_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT,
-                    condition TEXT,
-                    message TEXT,
-                    user_response TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    resolved_at TIMESTAMP
-                )
-            """)
-
-            # ==================== Indexes for new tables ====================
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_session ON facts(session_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_entity ON facts(entity)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_entity_attribute ON facts(entity, attribute)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_fact_sources_fact ON fact_sources(fact_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_fact_conflicts_facts ON fact_conflicts(fact_id_a, fact_id_b)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_entities_session ON entities(session_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_entity_edges_source ON entity_edges(source_entity_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_entity_edges_target ON entity_edges(target_entity_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_interrupt_session ON interrupt_events(session_id)")
-
-    # ==================== Node Management Methods ====================
-
-    def create_node(
-        self,
-        node_id: str,
-        content: str,
-        parent_id: Optional[str] = None,
-        score: float = 0.0,
-        depth: int = 0,
-        meta: Optional[Dict[str, Any]] = None,
-    ) -> bool:
-        """Create a new GoT node.
+    def create_session(self, session: ResearchSession) -> ResearchSession:
+        """
+        Create a new research session.
 
         Args:
-            node_id: Unique identifier for the node
-            content: Node content (research findings, subtopic, etc.)
-            parent_id: Parent node ID (None for root nodes)
-            score: Initial quality score (0-10)
-            depth: Depth in the research tree
-            meta: Additional metadata as dictionary
+            session: ResearchSession object with required fields
 
         Returns:
-            True if created successfully, False if node already exists
-        """
-        try:
-            with self._get_connection() as conn:
-                conn.execute(
-                    """
-                    INSERT INTO nodes (id, parent_id, content, score, depth, meta)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                    (
-                        node_id,
-                        parent_id,
-                        content,
-                        score,
-                        depth,
-                        json.dumps(meta) if meta else None,
-                    ),
-                )
-                return True
-        except sqlite3.IntegrityError:
-            return False
+            Created session with timestamps
 
-    def update_node(
+        Raises:
+            sqlite3.IntegrityError: If session_id already exists
+        """
+        with self._transaction() as conn:
+            conn.execute("""
+                INSERT INTO research_sessions
+                (session_id, research_topic, research_type, status, structured_prompt,
+                 research_plan, output_directory, metadata, error_log)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                session.session_id,
+                session.research_topic,
+                session.research_type,
+                session.status,
+                session.structured_prompt,
+                session.research_plan,
+                session.output_directory,
+                json.dumps(session.metadata) if session.metadata else None,
+                session.error_log
+            ))
+
+        return self.get_session(session.session_id)
+
+    def get_session(self, session_id: str) -> Optional[ResearchSession]:
+        """Get research session by ID."""
+        conn = self._get_connection()
+        cursor = conn.execute(
+            "SELECT * FROM research_sessions WHERE session_id = ?",
+            (session_id,)
+        )
+        row = cursor.fetchone()
+
+        if row is None:
+            return None
+
+        data = self._row_to_dict(row)
+        return ResearchSession(**data)
+
+    def update_session_status(
         self,
-        node_id: str,
-        content: Optional[str] = None,
-        score: Optional[float] = None,
-        status: Optional[str] = None,
-        meta: Optional[Dict[str, Any]] = None,
+        session_id: str,
+        status: str,
+        error_log: Optional[str] = None
     ) -> bool:
-        """Update an existing node.
+        """
+        Update session status.
 
         Args:
-            node_id: Node to update
-            content: New content (if provided)
-            score: New score (if provided)
-            status: New status (if provided)
-            meta: New metadata (if provided)
+            session_id: Session to update
+            status: New status (from SessionStatus enum)
+            error_log: Optional error message if status is FAILED
 
         Returns:
             True if updated successfully
         """
-        updates = []
-        params = []
+        with self._transaction() as conn:
+            params = [status]
+            sql = "UPDATE research_sessions SET status = ?"
 
-        if content is not None:
-            updates.append("content = ?")
-            params.append(content)
-        if score is not None:
-            updates.append("score = ?")
-            params.append(score)
-        if status is not None:
-            updates.append("status = ?")
-            params.append(status)
-        if meta is not None:
-            updates.append("meta = ?")
-            params.append(json.dumps(meta))
+            if status == SessionStatus.COMPLETED.value:
+                sql += ", completed_at = CURRENT_TIMESTAMP"
 
-        if not updates:
+            if error_log:
+                sql += ", error_log = ?"
+                params.append(error_log)
+
+            sql += " WHERE session_id = ?"
+            params.append(session_id)
+
+            cursor = conn.execute(sql, params)
+            return cursor.rowcount > 0
+
+    def update_session(self, session_id: str, **kwargs) -> bool:
+        """
+        Update session fields.
+
+        Args:
+            session_id: Session to update
+            **kwargs: Fields to update (structured_prompt, research_plan, metadata, etc.)
+
+        Returns:
+            True if updated successfully
+        """
+        if not kwargs:
             return False
 
-        updates.append("updated_at = CURRENT_TIMESTAMP")
-        params.append(node_id)
+        # Convert metadata to JSON if present
+        if 'metadata' in kwargs and kwargs['metadata'] is not None:
+            kwargs['metadata'] = json.dumps(kwargs['metadata'])
 
-        with self._get_connection() as conn:
-            conn.execute(
-                f"""
-                UPDATE nodes
-                SET {", ".join(updates)}
-                WHERE id = ?
-            """,
-                params,
-            )
-            return conn.total_changes > 0
+        set_clause = ", ".join(f"{k} = ?" for k in kwargs.keys())
+        values = list(kwargs.values()) + [session_id]
 
-    def get_node(self, node_id: str) -> Optional[Dict[str, Any]]:
-        """Retrieve a node by ID.
-
-        Args:
-            node_id: Node identifier
-
-        Returns:
-            Node data as dictionary or None if not found
-        """
-        with self._get_connection() as conn:
+        with self._transaction() as conn:
             cursor = conn.execute(
-                """
-                SELECT * FROM nodes WHERE id = ?
-            """,
-                (node_id,),
+                f"UPDATE research_sessions SET {set_clause} WHERE session_id = ?",
+                values
             )
-            row = cursor.fetchone()
-            if row:
-                return self._row_to_dict(row)
-            return None
+            return cursor.rowcount > 0
 
-    def get_children(self, parent_id: str) -> List[Dict[str, Any]]:
-        """Get all child nodes of a parent.
-
-        Args:
-            parent_id: Parent node ID
-
-        Returns:
-            List of child nodes
-        """
-        with self._get_connection() as conn:
-            cursor = conn.execute(
-                """
-                SELECT * FROM nodes
-                WHERE parent_id = ?
-                ORDER BY score DESC, created_at ASC
-            """,
-                (parent_id,),
-            )
-            return [self._row_to_dict(row) for row in cursor.fetchall()]
-
-    def get_top_nodes(
-        self, limit: int = 10, min_score: float = 0.0
-    ) -> List[Dict[str, Any]]:
-        """Get top-scoring nodes.
-
-        Args:
-            limit: Maximum number of nodes to return
-            min_score: Minimum score threshold
-
-        Returns:
-            List of top nodes sorted by score
-        """
-        with self._get_connection() as conn:
-            cursor = conn.execute(
-                """
-                SELECT * FROM nodes
-                WHERE score >= ?
-                ORDER BY score DESC, created_at ASC
-                LIMIT ?
-            """,
-                (min_score, limit),
-            )
-            return [self._row_to_dict(row) for row in cursor.fetchall()]
-
-    def query_nodes(
+    def list_sessions(
         self,
-        keyword: Optional[str] = None,
-        min_score: Optional[float] = None,
         status: Optional[str] = None,
-        limit: int = 100,
-    ) -> List[Dict[str, Any]]:
-        """Complex query for nodes with multiple filters.
+        limit: int = 100
+    ) -> List[ResearchSession]:
+        """
+        List research sessions.
 
         Args:
-            keyword: Search in content (case-insensitive)
-            min_score: Minimum score threshold
-            status: Filter by status
-            limit: Maximum results
+            status: Filter by status (optional)
+            limit: Maximum number of sessions to return
 
         Returns:
-            List of matching nodes
+            List of research sessions
         """
-        conditions = []
+        conn = self._get_connection()
+
+        sql = "SELECT * FROM research_sessions"
         params = []
 
-        if keyword:
-            conditions.append("content LIKE ?")
-            params.append(f"%{keyword}%")
-        if min_score is not None:
-            conditions.append("score >= ?")
-            params.append(min_score)
         if status:
-            conditions.append("status = ?")
+            sql += " WHERE status = ?"
             params.append(status)
 
-        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        sql += " ORDER BY created_at DESC LIMIT ?"
         params.append(limit)
 
-        with self._get_connection() as conn:
+        cursor = conn.execute(sql, params)
+
+        sessions = []
+        for row in cursor.fetchall():
+            data = self._row_to_dict(row)
+            sessions.append(ResearchSession(**data))
+
+        return sessions
+
+    def delete_session(self, session_id: str) -> bool:
+        """
+        Delete a session and all related data (cascading).
+
+        Args:
+            session_id: Session to delete
+
+        Returns:
+            True if deleted successfully
+        """
+        with self._transaction() as conn:
             cursor = conn.execute(
-                f"""
-                SELECT * FROM nodes
-                {where_clause}
-                ORDER BY score DESC, created_at ASC
-                LIMIT ?
-            """,
-                params,
+                "DELETE FROM research_sessions WHERE session_id = ?",
+                (session_id,)
             )
-            return [self._row_to_dict(row) for row in cursor.fetchall()]
+            return cursor.rowcount > 0
 
-    # ==================== Agent Heartbeat Methods ====================
+    # ========================================================================
+    # Graph of Thoughts Operations
+    # ========================================================================
 
-    def register_agent(
-        self, agent_id: str, meta: Optional[Dict[str, Any]] = None
-    ) -> bool:
-        """Register a new agent or update existing one.
+    def create_got_node(self, node: GoTNode) -> GoTNode:
+        """Create a GoT node."""
+        with self._transaction() as conn:
+            conn.execute("""
+                INSERT INTO got_nodes
+                (node_id, session_id, parent_id, node_type, content,
+                 quality_score, depth, status, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                node.node_id,
+                node.session_id,
+                node.parent_id,
+                node.node_type,
+                node.content,
+                node.quality_score,
+                node.depth,
+                node.status,
+                json.dumps(node.metadata) if node.metadata else None
+            ))
 
-        Args:
-            agent_id: Unique agent identifier
-            meta: Agent metadata
+        return self.get_got_node(node.node_id)
 
-        Returns:
-            True if successful
-        """
-        with self._get_connection() as conn:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO agent_heartbeats
-                (agent_id, last_seen, status, meta)
-                VALUES (?, CURRENT_TIMESTAMP, 'active', ?)
-            """,
-                (agent_id, json.dumps(meta) if meta else None),
-            )
-            return True
+    def get_got_node(self, node_id: str) -> Optional[GoTNode]:
+        """Get GoT node by ID."""
+        conn = self._get_connection()
+        cursor = conn.execute(
+            "SELECT * FROM got_nodes WHERE node_id = ?",
+            (node_id,)
+        )
+        row = cursor.fetchone()
 
-    def update_agent_heartbeat(
-        self,
-        agent_id: str,
-        current_action: Optional[str] = None,
-        status: Optional[str] = None,
-    ) -> bool:
-        """Update agent heartbeat and status.
+        if row is None:
+            return None
 
-        Args:
-            agent_id: Agent identifier
-            current_action: Current action description
-            status: Agent status (active, idle, completed, failed)
+        data = self._row_to_dict(row)
+        return GoTNode(**data)
 
-        Returns:
-            True if successful
-        """
-        updates = ["last_seen = CURRENT_TIMESTAMP"]
-        params = []
-
-        if current_action is not None:
-            updates.append("current_action = ?")
-            params.append(current_action)
-        if status is not None:
-            updates.append("status = ?")
-            params.append(status)
-
-        params.append(agent_id)
-
-        with self._get_connection() as conn:
-            conn.execute(
-                f"""
-                UPDATE agent_heartbeats
-                SET {", ".join(updates)}
-                WHERE agent_id = ?
-            """,
-                params,
-            )
-            return conn.total_changes > 0
-
-    def get_active_agents(self) -> List[Dict[str, Any]]:
-        """Get all active agents.
-
-        Returns:
-            List of active agent records
-        """
-        with self._get_connection() as conn:
-            cursor = conn.execute("""
-                SELECT * FROM agent_heartbeats
-                WHERE status = 'active'
-                ORDER BY last_seen DESC
-            """)
-            return [self._row_to_dict(row) for row in cursor.fetchall()]
-
-    # ==================== Session Management Methods ====================
-
-    def create_session(
-        self, session_id: str, topic: str, meta: Optional[Dict[str, Any]] = None
-    ) -> bool:
-        """Create a new research session.
-
-        Args:
-            session_id: Unique session identifier
-            topic: Research topic
-            meta: Session metadata
-
-        Returns:
-            True if created successfully
-        """
-        try:
-            with self._get_connection() as conn:
-                conn.execute(
-                    """
-                    INSERT INTO research_sessions (session_id, topic, meta)
-                    VALUES (?, ?, ?)
-                """,
-                    (session_id, topic, json.dumps(meta) if meta else None),
-                )
-                return True
-        except sqlite3.IntegrityError:
+    def update_got_node(self, node_id: str, **kwargs) -> bool:
+        """Update GoT node fields."""
+        if not kwargs:
             return False
 
-    def complete_session(self, session_id: str) -> bool:
-        """Mark a session as completed.
+        if 'metadata' in kwargs and kwargs['metadata'] is not None:
+            kwargs['metadata'] = json.dumps(kwargs['metadata'])
 
-        Args:
-            session_id: Session identifier
+        set_clause = ", ".join(f"{k} = ?" for k in kwargs.keys())
+        values = list(kwargs.values()) + [node_id]
 
-        Returns:
-            True if successful
-        """
-        with self._get_connection() as conn:
-            conn.execute(
-                """
-                UPDATE research_sessions
-                SET status = 'completed', completed_at = CURRENT_TIMESTAMP
-                WHERE session_id = ?
-            """,
-                (session_id,),
-            )
-            return conn.total_changes > 0
-
-    # ==================== Utility Methods ====================
-
-    def _row_to_dict(self, row: sqlite3.Row) -> Dict[str, Any]:
-        """Convert SQLite row to dictionary.
-
-        Args:
-            row: SQLite row object
-
-        Returns:
-            Dictionary representation
-        """
-        result = dict(row)
-        # Parse JSON fields
-        if "meta" in result and result["meta"]:
-            try:
-                result["meta"] = json.loads(result["meta"])
-            except json.JSONDecodeError:
-                result["meta"] = None
-        return result
-
-    def prune_low_score_nodes(self, threshold: float = 5.0) -> int:
-        """Remove nodes below score threshold (circuit breaking).
-
-        Args:
-            threshold: Minimum score to keep
-
-        Returns:
-            Number of nodes deleted
-        """
-        with self._get_connection() as conn:
+        with self._transaction() as conn:
             cursor = conn.execute(
-                """
-                DELETE FROM nodes WHERE score < ?
-            """,
-                (threshold,),
+                f"UPDATE got_nodes SET {set_clause} WHERE node_id = ?",
+                values
+            )
+            return cursor.rowcount > 0
+
+    def get_session_got_nodes(
+        self,
+        session_id: str,
+        status: Optional[str] = None
+    ) -> List[GoTNode]:
+        """Get all GoT nodes for a session."""
+        conn = self._get_connection()
+
+        sql = "SELECT * FROM got_nodes WHERE session_id = ?"
+        params = [session_id]
+
+        if status:
+            sql += " AND status = ?"
+            params.append(status)
+
+        sql += " ORDER BY depth, created_at"
+
+        cursor = conn.execute(sql, params)
+
+        nodes = []
+        for row in cursor.fetchall():
+            data = self._row_to_dict(row)
+            nodes.append(GoTNode(**data))
+
+        return nodes
+
+    def get_node_children(self, parent_id: str) -> List[GoTNode]:
+        """Get all children of a node."""
+        conn = self._get_connection()
+        cursor = conn.execute(
+            "SELECT * FROM got_nodes WHERE parent_id = ? ORDER BY quality_score DESC",
+            (parent_id,)
+        )
+
+        nodes = []
+        for row in cursor.fetchall():
+            data = self._row_to_dict(row)
+            nodes.append(GoTNode(**data))
+
+        return nodes
+
+    def log_got_operation(
+        self,
+        session_id: str,
+        operation_type: str,
+        node_ids: List[str],
+        parameters: Optional[Dict] = None,
+        result: Optional[Dict] = None
+    ) -> int:
+        """
+        Log a GoT operation for debugging and analysis.
+
+        Args:
+            session_id: Research session
+            operation_type: Type of operation (from GoTOperation enum)
+            node_ids: List of affected node IDs
+            parameters: Operation parameters
+            result: Operation result
+
+        Returns:
+            Operation log ID
+        """
+        with self._transaction() as conn:
+            cursor = conn.execute("""
+                INSERT INTO got_operations
+                (session_id, operation_type, node_ids, parameters, result)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                session_id,
+                operation_type,
+                json.dumps(node_ids),
+                json.dumps(parameters) if parameters else None,
+                json.dumps(result) if result else None
+            ))
+            return cursor.lastrowid
+
+    def get_got_operations(
+        self,
+        session_id: str,
+        operation_type: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Get GoT operation history for a session."""
+        conn = self._get_connection()
+
+        sql = "SELECT * FROM got_operations WHERE session_id = ?"
+        params = [session_id]
+
+        if operation_type:
+            sql += " AND operation_type = ?"
+            params.append(operation_type)
+
+        sql += " ORDER BY timestamp DESC"
+
+        cursor = conn.execute(sql, params)
+
+        operations = []
+        for row in cursor.fetchall():
+            data = self._row_to_dict(row)
+            # Parse JSON arrays
+            if data['node_ids']:
+                data['node_ids'] = json.loads(data['node_ids'])
+            operations.append(data)
+
+        return operations
+
+    def prune_nodes(self, node_ids: List[str]) -> int:
+        """
+        Mark multiple nodes as pruned.
+
+        Args:
+            node_ids: List of node IDs to prune
+
+        Returns:
+            Number of nodes pruned
+        """
+        if not node_ids:
+            return 0
+
+        with self._transaction() as conn:
+            placeholders = ','.join('?' * len(node_ids))
+            cursor = conn.execute(
+                f"UPDATE got_nodes SET status = ? WHERE node_id IN ({placeholders})",
+                [NodeStatus.PRUNED.value] + node_ids
             )
             return cursor.rowcount
 
-    def keep_best_n(self, n: int, parent_id: Optional[str] = None) -> int:
-        """Keep only top N nodes (GoT KeepBestN operation).
+    def keep_best_n(self, session_id: str, n: int, parent_id: Optional[str] = None) -> int:
+        """
+        Keep only top N nodes by quality score (GoT KeepBestN operation).
 
         Args:
-            n: Number of top nodes to keep
+            session_id: Research session
+            n: Number of nodes to keep
             parent_id: If provided, only prune children of this parent
 
         Returns:
-            Number of nodes deleted
+            Number of nodes pruned
         """
-        with self._get_connection() as conn:
+        conn = self._get_connection()
+
+        if parent_id:
+            # Get IDs of nodes to keep
+            cursor = conn.execute("""
+                SELECT node_id FROM got_nodes
+                WHERE parent_id = ? AND status = ?
+                ORDER BY quality_score DESC
+                LIMIT ?
+            """, (parent_id, NodeStatus.ACTIVE.value, n))
+        else:
+            # Global pruning
+            cursor = conn.execute("""
+                SELECT node_id FROM got_nodes
+                WHERE session_id = ? AND status = ?
+                ORDER BY quality_score DESC
+                LIMIT ?
+            """, (session_id, NodeStatus.ACTIVE.value, n))
+
+        keep_ids = [row['node_id'] for row in cursor.fetchall()]
+
+        if not keep_ids:
+            return 0
+
+        # Prune all other active nodes
+        with self._transaction() as conn:
+            placeholders = ','.join('?' * len(keep_ids))
+
             if parent_id:
-                # Get IDs of nodes to keep
-                cursor = conn.execute(
-                    """
-                    SELECT id FROM nodes
-                    WHERE parent_id = ?
-                    ORDER BY score DESC
-                    LIMIT ?
-                """,
-                    (parent_id, n),
-                )
-                keep_ids = [row[0] for row in cursor.fetchall()]
-
-                if not keep_ids:
-                    return 0
-
-                placeholders = ",".join("?" * len(keep_ids))
-                cursor = conn.execute(
-                    f"""
-                    DELETE FROM nodes
-                    WHERE parent_id = ? AND id NOT IN ({placeholders})
-                """,
-                    [parent_id] + keep_ids,
-                )
+                cursor = conn.execute(f"""
+                    UPDATE got_nodes
+                    SET status = ?
+                    WHERE parent_id = ? AND status = ? AND node_id NOT IN ({placeholders})
+                """, [NodeStatus.PRUNED.value, parent_id, NodeStatus.ACTIVE.value] + keep_ids)
             else:
-                # Global pruning
-                cursor = conn.execute(
-                    """
-                    SELECT id FROM nodes
-                    ORDER BY score DESC
-                    LIMIT ?
-                """,
-                    (n,),
-                )
-                keep_ids = [row[0] for row in cursor.fetchall()]
-
-                if not keep_ids:
-                    return 0
-
-                placeholders = ",".join("?" * len(keep_ids))
-                cursor = conn.execute(
-                    f"""
-                    DELETE FROM nodes WHERE id NOT IN ({placeholders})
-                """,
-                    keep_ids,
-                )
+                cursor = conn.execute(f"""
+                    UPDATE got_nodes
+                    SET status = ?
+                    WHERE session_id = ? AND status = ? AND node_id NOT IN ({placeholders})
+                """, [NodeStatus.PRUNED.value, session_id, NodeStatus.ACTIVE.value] + keep_ids)
 
             return cursor.rowcount
 
-    def get_statistics(self) -> Dict[str, Any]:
-        """Get overall statistics about the research state.
+    # ========================================================================
+    # Research Agent Operations
+    # ========================================================================
 
-        Returns:
-            Dictionary with statistics
-        """
-        with self._get_connection() as conn:
-            stats = {}
+    def register_agent(self, agent: ResearchAgent) -> ResearchAgent:
+        """Register a new research agent."""
+        with self._transaction() as conn:
+            conn.execute("""
+                INSERT INTO research_agents
+                (agent_id, session_id, agent_type, agent_role, status,
+                 focus_description, search_queries, output_file,
+                 token_usage, error_message, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                agent.agent_id,
+                agent.session_id,
+                agent.agent_type,
+                agent.agent_role,
+                agent.status,
+                agent.focus_description,
+                json.dumps(agent.search_queries) if agent.search_queries else None,
+                agent.output_file,
+                agent.token_usage,
+                agent.error_message,
+                json.dumps(agent.metadata) if agent.metadata else None
+            ))
 
-            # Node statistics
-            cursor = conn.execute("SELECT COUNT(*) FROM nodes")
-            stats["total_nodes"] = cursor.fetchone()[0]
+        return self.get_agent(agent.agent_id)
 
-            cursor = conn.execute("SELECT AVG(score) FROM nodes")
-            stats["avg_score"] = cursor.fetchone()[0] or 0.0
+    def get_agent(self, agent_id: str) -> Optional[ResearchAgent]:
+        """Get research agent by ID."""
+        conn = self._get_connection()
+        cursor = conn.execute(
+            "SELECT * FROM research_agents WHERE agent_id = ?",
+            (agent_id,)
+        )
+        row = cursor.fetchone()
 
-            cursor = conn.execute('SELECT COUNT(*) FROM nodes WHERE status = "pending"')
-            stats["pending_nodes"] = cursor.fetchone()[0]
+        if row is None:
+            return None
 
-            cursor = conn.execute(
-                'SELECT COUNT(*) FROM nodes WHERE status = "complete"'
-            )
-            stats["completed_nodes"] = cursor.fetchone()[0]
+        data = self._row_to_dict(row)
+        # Parse search_queries
+        if data['search_queries']:
+            data['search_queries'] = json.loads(data['search_queries'])
 
-            # Agent statistics
-            cursor = conn.execute(
-                'SELECT COUNT(*) FROM agent_heartbeats WHERE status = "active"'
-            )
-            stats["active_agents"] = cursor.fetchone()[0]
+        return ResearchAgent(**data)
 
-            return stats
-
-    def clear_all(self):
-        """Clear all data (use with caution)."""
-        with self._get_connection() as conn:
-            conn.execute("DELETE FROM nodes")
-            conn.execute("DELETE FROM agent_heartbeats")
-            conn.execute("DELETE FROM research_sessions")
-
-    def export_graph(self) -> Dict[str, Any]:
-        """Export entire graph structure for visualization or backup.
-
-        Returns:
-            Dictionary with nodes and edges
-        """
-        with self._get_connection() as conn:
-            cursor = conn.execute("SELECT * FROM nodes ORDER BY created_at")
-            nodes = [self._row_to_dict(row) for row in cursor.fetchall()]
-
-            edges = []
-            for node in nodes:
-                if node["parent_id"]:
-                    edges.append({"from": node["parent_id"], "to": node["id"]})
-
-            return {"nodes": nodes, "edges": edges}
-
-    def check_circuit_break(
-        self, node_id: str, consecutive_threshold: int = 3, score_threshold: float = 5.0
-    ) -> Dict[str, Any]:
-        children = self.get_children(node_id)
-
-        if len(children) < consecutive_threshold:
-            return {
-                "should_break": False,
-                "reason": "insufficient_data",
-                "children_count": len(children),
-            }
-
-        children_sorted = sorted(children, key=lambda x: x["created_at"])
-        recent_children = children_sorted[-consecutive_threshold:]
-        recent_scores = [child["score"] for child in recent_children]
-
-        all_low = all(score < score_threshold for score in recent_scores)
-
-        if all_low:
-            return {
-                "should_break": True,
-                "reason": "consecutive_low_scores",
-                "consecutive_count": consecutive_threshold,
-                "scores": recent_scores,
-                "avg_score": sum(recent_scores) / len(recent_scores),
-                "threshold": score_threshold,
-                "affected_nodes": [child["id"] for child in recent_children],
-            }
-
-        return {
-            "should_break": False,
-            "reason": "scores_acceptable",
-            "scores": recent_scores,
-            "avg_score": sum(recent_scores) / len(recent_scores),
-        }
-
-    def execute_circuit_break(
-        self, node_id: str, reason: str = "consecutive_low_scores"
-    ) -> Dict[str, Any]:
-        meta = self.get_node(node_id)
-        if meta:
-            current_meta = meta.get("meta", {})
-            current_meta["circuit_broken"] = True
-            current_meta["circuit_break_reason"] = reason
-            current_meta["circuit_break_timestamp"] = datetime.now().isoformat()
-            self.update_node(node_id, status="circuit_broken", meta=current_meta)
-
-        descendants = self._get_all_descendants(node_id)
-
-        pruned_count = 0
-        with self._get_connection() as conn:
-            for desc_id in descendants:
-                conn.execute("DELETE FROM nodes WHERE id = ?", (desc_id,))
-                pruned_count += 1
-
-        return {
-            "success": True,
-            "node_id": node_id,
-            "reason": reason,
-            "pruned_count": pruned_count,
-            "pruned_nodes": descendants,
-        }
-
-    def _get_all_descendants(self, node_id: str) -> List[str]:
-        descendants = []
-        children = self.get_children(node_id)
-
-        for child in children:
-            descendants.append(child["id"])
-            descendants.extend(self._get_all_descendants(child["id"]))
-
-        return descendants
-
-    def extend_branch_budget(
+    def update_agent_status(
         self,
-        node_id: str,
-        additional_depth: int = 2,
-        additional_tokens: int = 10000,
-        reason: str = "high_quality_node",
+        agent_id: str,
+        status: str,
+        error_message: Optional[str] = None
     ) -> bool:
-        node = self.get_node(node_id)
-        if not node:
+        """Update agent status."""
+        with self._transaction() as conn:
+            params = [status]
+            sql = "UPDATE research_agents SET status = ?"
+
+            if status == AgentStatus.COMPLETED.value:
+                sql += ", completed_at = CURRENT_TIMESTAMP"
+
+            if error_message:
+                sql += ", error_message = ?"
+                params.append(error_message)
+
+            sql += " WHERE agent_id = ?"
+            params.append(agent_id)
+
+            cursor = conn.execute(sql, params)
+            return cursor.rowcount > 0
+
+    def update_agent(self, agent_id: str, **kwargs) -> bool:
+        """Update agent fields."""
+        if not kwargs:
             return False
 
-        current_meta = node.get("meta") or {}
-        current_meta["extended_depth"] = (
-            current_meta.get("extended_depth", 0) + additional_depth
-        )
-        current_meta["extended_tokens"] = (
-            current_meta.get("extended_tokens", 0) + additional_tokens
-        )
-        current_meta["extension_reason"] = reason
-        current_meta["extension_timestamp"] = datetime.now().isoformat()
-        current_meta["max_depth"] = (
-            current_meta.get("max_depth", node.get("depth", 0)) + additional_depth
-        )
+        # Convert JSON fields
+        if 'search_queries' in kwargs and kwargs['search_queries'] is not None:
+            kwargs['search_queries'] = json.dumps(kwargs['search_queries'])
+        if 'metadata' in kwargs and kwargs['metadata'] is not None:
+            kwargs['metadata'] = json.dumps(kwargs['metadata'])
 
-        return self.update_node(node_id, meta=current_meta)
+        set_clause = ", ".join(f"{k} = ?" for k in kwargs.keys())
+        values = list(kwargs.values()) + [agent_id]
 
-    def calculate_information_entropy(
-        self, new_node_ids: List[str], existing_node_ids: List[str]
-    ) -> Dict[str, Any]:
-        new_content = []
-        for node_id in new_node_ids:
-            node = self.get_node(node_id)
-            if node:
-                new_content.append(node.get("content", ""))
+        with self._transaction() as conn:
+            cursor = conn.execute(
+                f"UPDATE research_agents SET {set_clause} WHERE agent_id = ?",
+                values
+            )
+            return cursor.rowcount > 0
 
-        existing_content = []
-        for node_id in existing_node_ids:
-            node = self.get_node(node_id)
-            if node:
-                existing_content.append(node.get("content", ""))
-
-        new_keywords = self._extract_keywords(" ".join(new_content))
-        existing_keywords = self._extract_keywords(" ".join(existing_content))
-
-        if not new_keywords or not existing_keywords:
-            return {
-                "entropy": 1.0,
-                "interpretation": "high_novelty",
-                "new_keyword_count": len(new_keywords),
-                "existing_keyword_count": len(existing_keywords),
-                "overlap_count": 0,
-            }
-
-        overlap = new_keywords & existing_keywords
-        union = new_keywords | existing_keywords
-        unique_new = new_keywords - existing_keywords
-
-        entropy = len(unique_new) / len(new_keywords) if new_keywords else 0.0
-
-        if entropy > 0.7:
-            interpretation = "high_novelty"
-        elif entropy > 0.4:
-            interpretation = "moderate_novelty"
-        elif entropy > 0.2:
-            interpretation = "low_novelty"
-        else:
-            interpretation = "duplicate_content"
-
-        return {
-            "entropy": entropy,
-            "interpretation": interpretation,
-            "new_keyword_count": len(new_keywords),
-            "existing_keyword_count": len(existing_keywords),
-            "unique_new_keywords": len(unique_new),
-            "overlap_count": len(overlap),
-            "overlap_ratio": len(overlap) / len(union) if union else 0,
-            "recommendation": "continue" if entropy > 0.2 else "stop_exploration",
-        }
-
-    def _extract_keywords(self, text: str) -> set:
-        import re
-
-        words = re.findall(r"\w+", text.lower())
-
-        stop_words = {
-            "the",
-            "a",
-            "an",
-            "and",
-            "or",
-            "but",
-            "in",
-            "on",
-            "at",
-            "to",
-            "for",
-            "of",
-            "with",
-            "by",
-            "from",
-            "as",
-            "is",
-            "was",
-            "are",
-            "were",
-            "been",
-            "be",
-            "have",
-            "has",
-            "had",
-            "do",
-            "does",
-            "did",
-            "will",
-            "would",
-            "could",
-            "should",
-            "may",
-            "might",
-            "must",
-            "can",
-            "this",
-            "that",
-            "these",
-            "those",
-            "it",
-            "its",
-            "which",
-            "what",
-            "who",
-            "when",
-            "where",
-        }
-
-        keywords = {word for word in words if len(word) > 3 and word not in stop_words}
-
-        return keywords
-
-    def get_branch_health(self, node_id: str) -> Dict[str, Any]:
-        descendants = self._get_all_descendants(node_id)
-
-        if not descendants:
-            return {"health": "unknown", "reason": "no_descendants", "node_count": 0}
-
-        scores = []
-        with self._get_connection() as conn:
-            for desc_id in descendants:
-                cursor = conn.execute(
-                    "SELECT score FROM nodes WHERE id = ?", (desc_id,)
-                )
-                row = cursor.fetchone()
-                if row:
-                    scores.append(row["score"])
-
-        if not scores:
-            return {
-                "health": "unknown",
-                "reason": "no_scores",
-                "node_count": len(descendants),
-            }
-
-        avg_score = sum(scores) / len(scores)
-        max_score = max(scores)
-        min_score = min(scores)
-
-        if avg_score >= 8.0:
-            health = "excellent"
-            recommendation = "continue_and_extend"
-        elif avg_score >= 6.0:
-            health = "good"
-            recommendation = "continue"
-        elif avg_score >= 4.0:
-            health = "fair"
-            recommendation = "monitor"
-        else:
-            health = "poor"
-            recommendation = "consider_circuit_break"
-
-        return {
-            "health": health,
-            "recommendation": recommendation,
-            "node_count": len(descendants),
-            "avg_score": avg_score,
-            "max_score": max_score,
-            "min_score": min_score,
-            "score_distribution": {
-                "excellent (9-10)": sum(1 for s in scores if s >= 9),
-                "good (7-8.9)": sum(1 for s in scores if 7 <= s < 9),
-                "fair (5-6.9)": sum(1 for s in scores if 5 <= s < 7),
-                "poor (0-4.9)": sum(1 for s in scores if s < 5),
-            },
-        }
-
-    # ==================== Fact Ledger Methods (Optimization #1) ====================
-
-    def create_fact(
+    def get_session_agents(
         self,
         session_id: str,
-        entity: str,
-        attribute: str,
-        value: str,
-        value_type: str = "text",
-        value_numeric: Optional[float] = None,
-        unit: Optional[str] = None,
-        confidence: str = "Medium",
-        context: Optional[str] = None,
-    ) -> int:
-        """Create a new atomic fact.
+        status: Optional[str] = None
+    ) -> List[ResearchAgent]:
+        """Get all agents for a session."""
+        conn = self._get_connection()
 
-        Args:
-            session_id: Research session ID
-            entity: Entity being described (e.g., "AI Healthcare Market")
-            attribute: Attribute being measured (e.g., "Size 2023")
-            value: The value as string (e.g., "$22.4B")
-            value_type: Type of value (number, date, percentage, currency, text)
-            value_numeric: Parsed numeric value for comparisons
-            unit: Unit of measurement
-            confidence: High, Medium, or Low
-            context: Additional interpretation context
+        sql = "SELECT * FROM research_agents WHERE session_id = ?"
+        params = [session_id]
 
-        Returns:
-            Fact ID
-        """
-        with self._get_connection() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO facts (session_id, entity, attribute, value, value_type,
-                                   value_numeric, unit, confidence, context)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-                (session_id, entity, attribute, value, value_type,
-                 value_numeric, unit, confidence, context),
-            )
-            return cursor.lastrowid
+        if status:
+            sql += " AND status = ?"
+            params.append(status)
 
-    def add_fact_source(
-        self,
-        fact_id: int,
-        source_url: str,
-        source_title: Optional[str] = None,
-        source_author: Optional[str] = None,
-        source_date: Optional[str] = None,
-        source_quality: Optional[str] = None,
-        page_number: Optional[str] = None,
-        excerpt: Optional[str] = None,
-    ) -> int:
-        """Add a source to a fact.
+        sql += " ORDER BY deployed_at"
 
-        Args:
-            fact_id: Fact to link
-            source_url: URL of the source
-            source_title: Title of source document
-            source_author: Author or organization
-            source_date: Publication date
-            source_quality: A-E quality rating
-            page_number: Page number if applicable
-            excerpt: Original text excerpt containing the fact
+        cursor = conn.execute(sql, params)
 
-        Returns:
-            Source link ID
-        """
-        with self._get_connection() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO fact_sources (fact_id, source_url, source_title, source_author,
-                                          source_date, source_quality, page_number, excerpt)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-                (fact_id, source_url, source_title, source_author,
-                 source_date, source_quality, page_number, excerpt),
-            )
-            return cursor.lastrowid
+        agents = []
+        for row in cursor.fetchall():
+            data = self._row_to_dict(row)
+            if data['search_queries']:
+                data['search_queries'] = json.loads(data['search_queries'])
+            agents.append(ResearchAgent(**data))
 
-    def get_fact(self, fact_id: int) -> Optional[Dict[str, Any]]:
-        """Get a fact by ID with its sources.
+        return agents
 
-        Args:
-            fact_id: Fact ID
+    def get_agent_statistics(self, session_id: str) -> Dict[str, Any]:
+        """Get agent statistics for a session."""
+        conn = self._get_connection()
 
-        Returns:
-            Fact with sources or None
-        """
-        with self._get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT * FROM facts WHERE id = ?", (fact_id,)
-            )
-            row = cursor.fetchone()
-            if not row:
-                return None
+        cursor = conn.execute("""
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as running,
+                SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as completed,
+                SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as failed,
+                SUM(token_usage) as total_tokens
+            FROM research_agents
+            WHERE session_id = ?
+        """, (AgentStatus.RUNNING.value, AgentStatus.COMPLETED.value,
+              AgentStatus.FAILED.value, session_id))
 
-            fact = self._row_to_dict(row)
+        row = cursor.fetchone()
+        return self._row_to_dict(row)
 
-            # Get sources
-            cursor = conn.execute(
-                "SELECT * FROM fact_sources WHERE fact_id = ?", (fact_id,)
-            )
-            fact["sources"] = [self._row_to_dict(r) for r in cursor.fetchall()]
+    # ========================================================================
+    # Fact Ledger Operations
+    # ========================================================================
 
-            return fact
+    def add_fact(self, fact: Fact) -> Fact:
+        """Add a fact to the ledger."""
+        with self._transaction() as conn:
+            cursor = conn.execute("""
+                INSERT INTO facts
+                (session_id, agent_id, entity, attribute, value, value_type,
+                 confidence, source_url, source_title, source_author,
+                 source_date, source_quality, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                fact.session_id,
+                fact.agent_id,
+                fact.entity,
+                fact.attribute,
+                fact.value,
+                fact.value_type,
+                fact.confidence,
+                fact.source_url,
+                fact.source_title,
+                fact.source_author,
+                fact.source_date,
+                fact.source_quality,
+                json.dumps(fact.metadata) if fact.metadata else None
+            ))
+            fact.fact_id = cursor.lastrowid
+
+        return self.get_fact(fact.fact_id)
+
+    def get_fact(self, fact_id: int) -> Optional[Fact]:
+        """Get fact by ID."""
+        conn = self._get_connection()
+        cursor = conn.execute(
+            "SELECT * FROM facts WHERE fact_id = ?",
+            (fact_id,)
+        )
+        row = cursor.fetchone()
+
+        if row is None:
+            return None
+
+        data = self._row_to_dict(row)
+        return Fact(**data)
 
     def query_facts(
         self,
         session_id: str,
         entity: Optional[str] = None,
         attribute: Optional[str] = None,
-        min_confidence: Optional[str] = None,
-        value_type: Optional[str] = None,
-        limit: int = 100,
-    ) -> List[Dict[str, Any]]:
-        """Query facts with filters.
+        confidence: Optional[str] = None
+    ) -> List[Fact]:
+        """
+        Query facts from the ledger.
 
         Args:
-            session_id: Research session ID
-            entity: Filter by entity name (partial match)
-            attribute: Filter by attribute (partial match)
-            min_confidence: Minimum confidence level
-            value_type: Filter by value type
-            limit: Maximum results
+            session_id: Research session
+            entity: Filter by entity (optional)
+            attribute: Filter by attribute (optional)
+            confidence: Minimum confidence level (optional)
 
         Returns:
-            List of matching facts with sources
+            List of matching facts
         """
-        conditions = ["session_id = ?"]
-        params: List[Any] = [session_id]
+        conn = self._get_connection()
+
+        sql = "SELECT * FROM facts WHERE session_id = ?"
+        params = [session_id]
 
         if entity:
-            conditions.append("entity LIKE ?")
-            params.append(f"%{entity}%")
+            sql += " AND entity = ?"
+            params.append(entity)
+
         if attribute:
-            conditions.append("attribute LIKE ?")
-            params.append(f"%{attribute}%")
-        if min_confidence:
-            confidence_order = {"High": 3, "Medium": 2, "Low": 1}
-            min_level = confidence_order.get(min_confidence, 1)
-            confidence_conditions = [
-                c for c, v in confidence_order.items() if v >= min_level
-            ]
-            placeholders = ",".join("?" * len(confidence_conditions))
-            conditions.append(f"confidence IN ({placeholders})")
-            params.extend(confidence_conditions)
-        if value_type:
-            conditions.append("value_type = ?")
-            params.append(value_type)
+            sql += " AND attribute = ?"
+            params.append(attribute)
 
-        params.append(limit)
-        where_clause = " AND ".join(conditions)
+        if confidence:
+            sql += " AND confidence = ?"
+            params.append(confidence)
 
-        with self._get_connection() as conn:
-            cursor = conn.execute(
-                f"""
-                SELECT * FROM facts
-                WHERE {where_clause}
-                ORDER BY created_at DESC
-                LIMIT ?
-            """,
-                params,
-            )
+        sql += " ORDER BY extraction_timestamp DESC"
 
-            facts = []
-            for row in cursor.fetchall():
-                fact = self._row_to_dict(row)
-                # Get sources for each fact
-                src_cursor = conn.execute(
-                    "SELECT * FROM fact_sources WHERE fact_id = ?",
-                    (fact["id"],),
-                )
-                fact["sources"] = [self._row_to_dict(r) for r in src_cursor.fetchall()]
-                facts.append(fact)
+        cursor = conn.execute(sql, params)
 
-            return facts
+        facts = []
+        for row in cursor.fetchall():
+            data = self._row_to_dict(row)
+            facts.append(Fact(**data))
 
-    def detect_conflicts(self, session_id: str) -> List[Dict[str, Any]]:
-        """Detect conflicts between facts in a session.
+        return facts
 
-        Finds facts with the same entity + attribute but different values.
-
-        Args:
-            session_id: Research session ID
-
-        Returns:
-            List of detected conflicts
-        """
-        with self._get_connection() as conn:
-            # Find groups with multiple different values
-            cursor = conn.execute(
-                """
-                SELECT entity, attribute, COUNT(DISTINCT value) as value_count
-                FROM facts
-                WHERE session_id = ?
-                GROUP BY entity, attribute
-                HAVING value_count > 1
-            """,
-                (session_id,),
-            )
-
-            conflicts = []
-            for group in cursor.fetchall():
-                entity, attribute = group["entity"], group["attribute"]
-
-                # Get all facts in this group
-                fact_cursor = conn.execute(
-                    """
-                    SELECT * FROM facts
-                    WHERE session_id = ? AND entity = ? AND attribute = ?
-                    ORDER BY created_at
-                """,
-                    (session_id, entity, attribute),
-                )
-
-                group_facts = [self._row_to_dict(r) for r in fact_cursor.fetchall()]
-
-                # Calculate severity based on numeric difference
-                severity = "minor"
-                if len(group_facts) >= 2:
-                    numeric_values = [
-                        f["value_numeric"]
-                        for f in group_facts
-                        if f["value_numeric"] is not None
-                    ]
-                    if len(numeric_values) >= 2:
-                        max_val = max(numeric_values)
-                        min_val = min(numeric_values)
-                        if max_val > 0:
-                            diff_pct = (max_val - min_val) / max_val * 100
-                            if diff_pct > 20:
-                                severity = "critical"
-                            elif diff_pct > 5:
-                                severity = "moderate"
-
-                conflicts.append({
-                    "entity": entity,
-                    "attribute": attribute,
-                    "facts": group_facts,
-                    "conflict_type": "numerical" if group_facts[0]["value_numeric"] else "scope",
-                    "severity": severity,
-                })
-
-            return conflicts
-
-    def create_conflict(
+    def add_fact_conflict(
         self,
-        fact_id_a: int,
-        fact_id_b: int,
+        session_id: str,
+        entity: str,
+        attribute: str,
         conflict_type: str,
         severity: str,
-        description: str,
+        fact_ids: List[int],
+        explanation: Optional[str] = None
     ) -> int:
-        """Record a conflict between two facts.
-
-        Args:
-            fact_id_a: First fact ID
-            fact_id_b: Second fact ID
-            conflict_type: Type of conflict
-            severity: critical, moderate, or minor
-            description: Description of the conflict
-
-        Returns:
-            Conflict ID
-        """
-        with self._get_connection() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO fact_conflicts (fact_id_a, fact_id_b, conflict_type, severity, description)
-                VALUES (?, ?, ?, ?, ?)
-            """,
-                (fact_id_a, fact_id_b, conflict_type, severity, description),
-            )
-            return cursor.lastrowid
-
-    def resolve_conflict(self, conflict_id: int, resolution: str) -> bool:
-        """Mark a conflict as resolved.
-
-        Args:
-            conflict_id: Conflict ID
-            resolution: Resolution explanation
-
-        Returns:
-            True if successful
-        """
-        with self._get_connection() as conn:
-            conn.execute(
-                """
-                UPDATE fact_conflicts
-                SET resolution = ?, resolved_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-            """,
-                (resolution, conflict_id),
-            )
-            return conn.total_changes > 0
-
-    def get_statistics_table(self, session_id: str) -> Dict[str, Any]:
-        """Generate key statistics table from facts.
-
-        Args:
-            session_id: Research session ID
-
-        Returns:
-            Statistics summary
-        """
-        with self._get_connection() as conn:
-            # Get high-confidence numerical facts
-            cursor = conn.execute(
-                """
-                SELECT f.*, fs.source_author, fs.source_date, fs.source_quality
-                FROM facts f
-                LEFT JOIN fact_sources fs ON f.id = fs.fact_id
-                WHERE f.session_id = ?
-                  AND f.confidence = 'High'
-                  AND f.value_numeric IS NOT NULL
-                ORDER BY f.entity, f.attribute
-            """,
-                (session_id,),
-            )
-
-            stats = []
-            for row in cursor.fetchall():
-                stats.append({
-                    "entity": row["entity"],
-                    "attribute": row["attribute"],
-                    "value": row["value"],
-                    "source": f"{row['source_author'] or 'Unknown'}, {row['source_date'] or 'N/A'}",
-                    "quality": row["source_quality"] or "N/A",
-                })
-
-            # Get conflict count
-            conflict_cursor = conn.execute(
-                """
-                SELECT COUNT(*) as count
-                FROM fact_conflicts fc
-                JOIN facts f ON fc.fact_id_a = f.id
-                WHERE f.session_id = ? AND fc.resolved_at IS NULL
-            """,
-                (session_id,),
-            )
-            unresolved_conflicts = conflict_cursor.fetchone()["count"]
-
-            # Get total fact counts
-            count_cursor = conn.execute(
-                """
-                SELECT
-                    COUNT(*) as total,
-                    SUM(CASE WHEN confidence = 'High' THEN 1 ELSE 0 END) as high_confidence,
-                    SUM(CASE WHEN confidence = 'Medium' THEN 1 ELSE 0 END) as medium_confidence,
-                    SUM(CASE WHEN confidence = 'Low' THEN 1 ELSE 0 END) as low_confidence
-                FROM facts
-                WHERE session_id = ?
-            """,
-                (session_id,),
-            )
-            counts = self._row_to_dict(count_cursor.fetchone())
-
-            return {
-                "statistics": stats,
-                "unresolved_conflicts": unresolved_conflicts,
-                "fact_counts": counts,
-            }
-
-    # ==================== Entity Graph Methods (Optimization #2) ====================
-
-    def create_entity(
-        self,
-        session_id: str,
-        name: str,
-        entity_type: Optional[str] = None,
-        description: Optional[str] = None,
-    ) -> int:
-        """Create a new entity.
-
-        Args:
-            session_id: Research session ID
-            name: Entity name
-            entity_type: Type (company, person, technology, market)
-            description: Entity description
-
-        Returns:
-            Entity ID
-        """
-        # Check for existing entity with same canonical name
-        canonical = self.get_canonical_name(name)
-
-        with self._get_connection() as conn:
-            # Check if entity already exists
-            cursor = conn.execute(
-                "SELECT id FROM entities WHERE session_id = ? AND name = ?",
-                (session_id, canonical),
-            )
-            existing = cursor.fetchone()
-            if existing:
-                return existing["id"]
-
-            cursor = conn.execute(
-                """
-                INSERT INTO entities (session_id, name, entity_type, description)
-                VALUES (?, ?, ?, ?)
-            """,
-                (session_id, canonical, entity_type, description),
-            )
-            return cursor.lastrowid
-
-    def add_entity_alias(self, canonical_name: str, alias: str) -> bool:
-        """Add an alias for an entity.
-
-        Args:
-            canonical_name: The standard name
-            alias: Alternative name
-
-        Returns:
-            True if added successfully
-        """
-        try:
-            with self._get_connection() as conn:
-                conn.execute(
-                    "INSERT INTO entity_aliases (canonical_name, alias) VALUES (?, ?)",
-                    (canonical_name, alias),
-                )
-                return True
-        except sqlite3.IntegrityError:
-            return False
-
-    def get_canonical_name(self, name: str) -> str:
-        """Get canonical name for an entity.
-
-        Args:
-            name: Entity name or alias
-
-        Returns:
-            Canonical name or original name if no alias found
-        """
-        with self._get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT canonical_name FROM entity_aliases WHERE alias = ?",
-                (name,),
-            )
-            row = cursor.fetchone()
-            return row["canonical_name"] if row else name
-
-    def create_entity_edge(
-        self,
-        session_id: str,
-        source_entity_id: int,
-        target_entity_id: int,
-        relation_type: str,
-        confidence: float = 0.5,
-        evidence: Optional[str] = None,
-        source_url: Optional[str] = None,
-    ) -> int:
-        """Create an edge between two entities.
-
-        Args:
-            session_id: Research session ID
-            source_entity_id: Source entity
-            target_entity_id: Target entity
-            relation_type: Type of relationship
-            confidence: Confidence score (0-1)
-            evidence: Supporting evidence
-            source_url: Source URL
-
-        Returns:
-            Edge ID
-        """
-        with self._get_connection() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO entity_edges (session_id, source_entity_id, target_entity_id,
-                                          relation_type, confidence, evidence, source_url)
+        """Record a fact conflict."""
+        with self._transaction() as conn:
+            cursor = conn.execute("""
+                INSERT INTO fact_conflicts
+                (session_id, entity, attribute, conflict_type, severity,
+                 fact_ids, explanation)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-                (session_id, source_entity_id, target_entity_id,
-                 relation_type, confidence, evidence, source_url),
-            )
+            """, (
+                session_id,
+                entity,
+                attribute,
+                conflict_type,
+                severity,
+                json.dumps(fact_ids),
+                explanation
+            ))
             return cursor.lastrowid
 
-    def get_related_entities(
-        self,
-        entity_id: int,
-        relation_type: Optional[str] = None,
-        direction: str = "both",
-    ) -> List[Dict[str, Any]]:
-        """Get entities related to a given entity.
-
-        Args:
-            entity_id: Entity to find relations for
-            relation_type: Filter by relation type
-            direction: 'outgoing', 'incoming', or 'both'
-
-        Returns:
-            List of related entities with relationship info
-        """
-        results = []
-
-        with self._get_connection() as conn:
-            if direction in ("outgoing", "both"):
-                query = """
-                    SELECT e.*, ee.relation_type, ee.confidence, ee.evidence, 'outgoing' as direction
-                    FROM entities e
-                    JOIN entity_edges ee ON e.id = ee.target_entity_id
-                    WHERE ee.source_entity_id = ?
-                """
-                params: List[Any] = [entity_id]
-                if relation_type:
-                    query += " AND ee.relation_type = ?"
-                    params.append(relation_type)
-
-                cursor = conn.execute(query, params)
-                results.extend([self._row_to_dict(r) for r in cursor.fetchall()])
-
-            if direction in ("incoming", "both"):
-                query = """
-                    SELECT e.*, ee.relation_type, ee.confidence, ee.evidence, 'incoming' as direction
-                    FROM entities e
-                    JOIN entity_edges ee ON e.id = ee.source_entity_id
-                    WHERE ee.target_entity_id = ?
-                """
-                params = [entity_id]
-                if relation_type:
-                    query += " AND ee.relation_type = ?"
-                    params.append(relation_type)
-
-                cursor = conn.execute(query, params)
-                results.extend([self._row_to_dict(r) for r in cursor.fetchall()])
-
-        return results
-
-    def record_cooccurrence(
-        self,
-        entity_a_id: int,
-        entity_b_id: int,
-        context: str,
-    ) -> None:
-        """Record a co-occurrence between two entities.
-
-        Args:
-            entity_a_id: First entity
-            entity_b_id: Second entity
-            context: Context snippet where they appeared together
-        """
-        # Ensure consistent ordering
-        if entity_a_id > entity_b_id:
-            entity_a_id, entity_b_id = entity_b_id, entity_a_id
-
-        with self._get_connection() as conn:
-            cursor = conn.execute(
-                """
-                SELECT id, cooccurrence_count, context_snippets
-                FROM entity_cooccurrence
-                WHERE entity_a_id = ? AND entity_b_id = ?
-            """,
-                (entity_a_id, entity_b_id),
-            )
-            existing = cursor.fetchone()
-
-            if existing:
-                snippets = json.loads(existing["context_snippets"] or "[]")
-                snippets.append(context)
-                conn.execute(
-                    """
-                    UPDATE entity_cooccurrence
-                    SET cooccurrence_count = cooccurrence_count + 1,
-                        context_snippets = ?
-                    WHERE id = ?
-                """,
-                    (json.dumps(snippets[-10:]), existing["id"]),  # Keep last 10
-                )
-            else:
-                conn.execute(
-                    """
-                    INSERT INTO entity_cooccurrence (entity_a_id, entity_b_id, cooccurrence_count, context_snippets)
-                    VALUES (?, ?, 1, ?)
-                """,
-                    (entity_a_id, entity_b_id, json.dumps([context])),
-                )
-
-    # ==================== Interrupt Event Methods (Optimization #4) ====================
-
-    def create_interrupt(
+    def get_conflicts(
         self,
         session_id: str,
-        condition: str,
-        message: str,
-    ) -> int:
-        """Create an interrupt event.
+        resolved: Optional[bool] = None
+    ) -> List[Dict]:
+        """Get fact conflicts for a session."""
+        conn = self._get_connection()
 
-        Args:
-            session_id: Research session ID
-            condition: Condition that triggered the interrupt
-            message: Message to show user
+        sql = "SELECT * FROM fact_conflicts WHERE session_id = ?"
+        params = [session_id]
 
-        Returns:
-            Interrupt event ID
-        """
-        with self._get_connection() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO interrupt_events (session_id, condition, message)
-                VALUES (?, ?, ?)
-            """,
-                (session_id, condition, message),
-            )
-            return cursor.lastrowid
+        if resolved is not None:
+            sql += " AND resolved = ?"
+            params.append(resolved)
 
-    def resolve_interrupt(self, interrupt_id: int, user_response: str) -> bool:
-        """Record user response and resolve interrupt.
+        sql += " ORDER BY severity DESC, detected_at DESC"
 
-        Args:
-            interrupt_id: Interrupt event ID
-            user_response: User's response
+        cursor = conn.execute(sql, params)
 
-        Returns:
-            True if successful
-        """
-        with self._get_connection() as conn:
-            conn.execute(
-                """
-                UPDATE interrupt_events
-                SET user_response = ?, resolved_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-            """,
-                (user_response, interrupt_id),
-            )
-            return conn.total_changes > 0
+        conflicts = []
+        for row in cursor.fetchall():
+            data = self._row_to_dict(row)
+            data['fact_ids'] = json.loads(data['fact_ids'])
+            data['resolved'] = bool(data['resolved'])
+            conflicts.append(data)
 
-    def get_pending_interrupts(self, session_id: str) -> List[Dict[str, Any]]:
-        """Get unresolved interrupt events.
+        return conflicts
 
-        Args:
-            session_id: Research session ID
+    def resolve_conflict(self, conflict_id: int, resolution_note: str) -> bool:
+        """Mark a conflict as resolved."""
+        with self._transaction() as conn:
+            cursor = conn.execute("""
+                UPDATE fact_conflicts
+                SET resolved = TRUE, resolution_note = ?
+                WHERE conflict_id = ?
+            """, (resolution_note, conflict_id))
+            return cursor.rowcount > 0
 
-        Returns:
-            List of pending interrupts
-        """
-        with self._get_connection() as conn:
-            cursor = conn.execute(
-                """
-                SELECT * FROM interrupt_events
-                WHERE session_id = ? AND resolved_at IS NULL
-                ORDER BY created_at DESC
-            """,
-                (session_id,),
-            )
-            return [self._row_to_dict(r) for r in cursor.fetchall()]
+    # ========================================================================
+    # Entity Graph Operations
+    # ========================================================================
+
+    def add_entity(self, entity: Entity) -> Entity:
+        """Add or update an entity."""
+        with self._transaction() as conn:
+            try:
+                cursor = conn.execute("""
+                    INSERT INTO entities
+                    (session_id, entity_name, entity_type, aliases,
+                     description, mention_count, metadata)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    entity.session_id,
+                    entity.entity_name,
+                    entity.entity_type,
+                    json.dumps(entity.aliases) if entity.aliases else None,
+                    entity.description,
+                    entity.mention_count,
+                    json.dumps(entity.metadata) if entity.metadata else None
+                ))
+                entity.entity_id = cursor.lastrowid
+            except sqlite3.IntegrityError:
+                # Entity already exists, increment mention count
+                conn.execute("""
+                    UPDATE entities
+                    SET mention_count = mention_count + 1
+                    WHERE session_id = ? AND entity_name = ? AND entity_type = ?
+                """, (entity.session_id, entity.entity_name, entity.entity_type))
+
+                cursor = conn.execute("""
+                    SELECT entity_id FROM entities
+                    WHERE session_id = ? AND entity_name = ? AND entity_type = ?
+                """, (entity.session_id, entity.entity_name, entity.entity_type))
+                entity.entity_id = cursor.fetchone()['entity_id']
+
+        return self.get_entity(entity.entity_id)
+
+    def get_entity(self, entity_id: int) -> Optional[Entity]:
+        """Get entity by ID."""
+        conn = self._get_connection()
+        cursor = conn.execute(
+            "SELECT * FROM entities WHERE entity_id = ?",
+            (entity_id,)
+        )
+        row = cursor.fetchone()
+
+        if row is None:
+            return None
+
+        data = self._row_to_dict(row)
+        if data['aliases']:
+            data['aliases'] = json.loads(data['aliases'])
+
+        return Entity(**data)
+
+    def find_entity(
+        self,
+        session_id: str,
+        entity_name: str,
+        entity_type: str
+    ) -> Optional[Entity]:
+        """Find entity by name and type."""
+        conn = self._get_connection()
+        cursor = conn.execute("""
+            SELECT * FROM entities
+            WHERE session_id = ? AND entity_name = ? AND entity_type = ?
+        """, (session_id, entity_name, entity_type))
+        row = cursor.fetchone()
+
+        if row is None:
+            return None
+
+        data = self._row_to_dict(row)
+        if data['aliases']:
+            data['aliases'] = json.loads(data['aliases'])
+
+        return Entity(**data)
+
+    def add_relationship(self, relationship: EntityRelationship) -> EntityRelationship:
+        """Add an entity relationship."""
+        with self._transaction() as conn:
+            cursor = conn.execute("""
+                INSERT INTO entity_relationships
+                (session_id, source_entity_id, target_entity_id, relation_type,
+                 confidence, evidence, source_url, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                relationship.session_id,
+                relationship.source_entity_id,
+                relationship.target_entity_id,
+                relationship.relation_type,
+                relationship.confidence,
+                relationship.evidence,
+                relationship.source_url,
+                json.dumps(relationship.metadata) if relationship.metadata else None
+            ))
+            relationship.relationship_id = cursor.lastrowid
+
+        return self.get_relationship(relationship.relationship_id)
+
+    def get_relationship(self, relationship_id: int) -> Optional[EntityRelationship]:
+        """Get relationship by ID."""
+        conn = self._get_connection()
+        cursor = conn.execute(
+            "SELECT * FROM entity_relationships WHERE relationship_id = ?",
+            (relationship_id,)
+        )
+        row = cursor.fetchone()
+
+        if row is None:
+            return None
+
+        data = self._row_to_dict(row)
+        return EntityRelationship(**data)
+
+    def get_entity_graph(
+        self,
+        session_id: str
+    ) -> Tuple[List[Entity], List[EntityRelationship]]:
+        """Get all entities and relationships for a session."""
+        conn = self._get_connection()
+
+        # Get entities
+        cursor = conn.execute(
+            "SELECT * FROM entities WHERE session_id = ? ORDER BY mention_count DESC",
+            (session_id,)
+        )
+
+        entities = []
+        for row in cursor.fetchall():
+            data = self._row_to_dict(row)
+            if data['aliases']:
+                data['aliases'] = json.loads(data['aliases'])
+            entities.append(Entity(**data))
+
+        # Get relationships
+        cursor = conn.execute(
+            "SELECT * FROM entity_relationships WHERE session_id = ? ORDER BY confidence DESC",
+            (session_id,)
+        )
+
+        relationships = []
+        for row in cursor.fetchall():
+            data = self._row_to_dict(row)
+            relationships.append(EntityRelationship(**data))
+
+        return entities, relationships
+
+    # ========================================================================
+    # Citation Operations
+    # ========================================================================
+
+    def add_citation(self, citation: Citation) -> Citation:
+        """Add a citation."""
+        with self._transaction() as conn:
+            cursor = conn.execute("""
+                INSERT INTO citations
+                (session_id, agent_id, claim, author, publication_date, title,
+                 url, page_numbers, quality_rating, url_accessible, complete, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                citation.session_id,
+                citation.agent_id,
+                citation.claim,
+                citation.author,
+                citation.publication_date,
+                citation.title,
+                citation.url,
+                citation.page_numbers,
+                citation.quality_rating,
+                citation.url_accessible,
+                citation.complete,
+                json.dumps(citation.metadata) if citation.metadata else None
+            ))
+            citation.citation_id = cursor.lastrowid
+
+        return self.get_citation(citation.citation_id)
+
+    def get_citation(self, citation_id: int) -> Optional[Citation]:
+        """Get citation by ID."""
+        conn = self._get_connection()
+        cursor = conn.execute(
+            "SELECT * FROM citations WHERE citation_id = ?",
+            (citation_id,)
+        )
+        row = cursor.fetchone()
+
+        if row is None:
+            return None
+
+        data = self._row_to_dict(row)
+        if data.get('url_accessible') is not None:
+            data['url_accessible'] = bool(data['url_accessible'])
+        data['complete'] = bool(data['complete'])
+
+        return Citation(**data)
+
+    def update_citation_validation(
+        self,
+        citation_id: int,
+        quality_rating: str,
+        url_accessible: bool,
+        complete: bool
+    ) -> bool:
+        """Update citation validation results."""
+        with self._transaction() as conn:
+            cursor = conn.execute("""
+                UPDATE citations
+                SET quality_rating = ?, url_accessible = ?, complete = ?,
+                    validation_timestamp = CURRENT_TIMESTAMP
+                WHERE citation_id = ?
+            """, (quality_rating, url_accessible, complete, citation_id))
+            return cursor.rowcount > 0
+
+    def get_session_citations(self, session_id: str) -> List[Citation]:
+        """Get all citations for a session."""
+        conn = self._get_connection()
+        cursor = conn.execute(
+            "SELECT * FROM citations WHERE session_id = ? ORDER BY quality_rating",
+            (session_id,)
+        )
+
+        citations = []
+        for row in cursor.fetchall():
+            data = self._row_to_dict(row)
+            if data.get('url_accessible') is not None:
+                data['url_accessible'] = bool(data['url_accessible'])
+            data['complete'] = bool(data['complete'])
+            citations.append(Citation(**data))
+
+        return citations
+
+    def get_citation_statistics(self, session_id: str) -> Dict[str, Any]:
+        """Get citation statistics for a session."""
+        conn = self._get_connection()
+
+        cursor = conn.execute("""
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN complete = 1 THEN 1 ELSE 0 END) as complete,
+                SUM(CASE WHEN url_accessible = 1 THEN 1 ELSE 0 END) as accessible,
+                SUM(CASE WHEN quality_rating = 'A' THEN 1 ELSE 0 END) as quality_a,
+                SUM(CASE WHEN quality_rating = 'B' THEN 1 ELSE 0 END) as quality_b,
+                SUM(CASE WHEN quality_rating = 'C' THEN 1 ELSE 0 END) as quality_c,
+                SUM(CASE WHEN quality_rating = 'D' THEN 1 ELSE 0 END) as quality_d,
+                SUM(CASE WHEN quality_rating = 'E' THEN 1 ELSE 0 END) as quality_e
+            FROM citations
+            WHERE session_id = ?
+        """, (session_id,))
+
+        row = cursor.fetchone()
+        return self._row_to_dict(row)
+
+    # ========================================================================
+    # Utility Operations
+    # ========================================================================
+
+    def get_session_statistics(self, session_id: str) -> Dict[str, Any]:
+        """Get comprehensive statistics for a session."""
+        return {
+            'session': self.get_session(session_id),
+            'agents': self.get_agent_statistics(session_id),
+            'got_nodes': len(self.get_session_got_nodes(session_id)),
+            'facts': len(self.query_facts(session_id)),
+            'entities': len(self.get_entity_graph(session_id)[0]),
+            'citations': self.get_citation_statistics(session_id),
+            'conflicts': len(self.get_conflicts(session_id, resolved=False))
+        }
+
+    def export_session(self, session_id: str) -> Dict[str, Any]:
+        """Export complete session data for backup or analysis."""
+        entities, relationships = self.get_entity_graph(session_id)
+
+        return {
+            'session': asdict(self.get_session(session_id)),
+            'agents': [asdict(a) for a in self.get_session_agents(session_id)],
+            'got_nodes': [asdict(n) for n in self.get_session_got_nodes(session_id)],
+            'got_operations': self.get_got_operations(session_id),
+            'facts': [asdict(f) for f in self.query_facts(session_id)],
+            'conflicts': self.get_conflicts(session_id),
+            'entities': [asdict(e) for e in entities],
+            'relationships': [asdict(r) for r in relationships],
+            'citations': [asdict(c) for c in self.get_session_citations(session_id)],
+            'statistics': self.get_session_statistics(session_id)
+        }
+
+
+# ============================================================================
+# Convenience Functions
+# ============================================================================
+
+def get_default_state_manager() -> StateManager:
+    """Get default StateManager instance."""
+    return StateManager()
+
+
+# ============================================================================
+# Example Usage
+# ============================================================================
+
+if __name__ == "__main__":
+    # Basic functionality test
+    sm = StateManager()
+
+    # Create a test session
+    session = ResearchSession(
+        session_id="test-refactored-001",
+        research_topic="Testing Refactored StateManager",
+        research_type=ResearchType.DEEP.value,
+        status=SessionStatus.INITIALIZING.value
+    )
+
+    created_session = sm.create_session(session)
+    print(f"✓ Created session: {created_session.session_id}")
+
+    # Retrieve it
+    retrieved = sm.get_session("test-refactored-001")
+    print(f"✓ Retrieved session: {retrieved.research_topic}")
+
+    # Update status
+    sm.update_session_status(
+        "test-refactored-001",
+        SessionStatus.PLANNING.value
+    )
+    print("✓ Updated session status")
+
+    # Create a GoT node
+    root_node = GoTNode(
+        node_id="root-001",
+        session_id="test-refactored-001",
+        content="Root research question",
+        node_type=NodeType.ROOT.value,
+        quality_score=8.5
+    )
+    sm.create_got_node(root_node)
+    print("✓ Created GoT node")
+
+    # Register an agent
+    agent = ResearchAgent(
+        agent_id="agent-001",
+        session_id="test-refactored-001",
+        agent_type="web-research",
+        agent_role="Market data collection",
+        status=AgentStatus.RUNNING.value
+    )
+    sm.register_agent(agent)
+    print("✓ Registered agent")
+
+    # Add a fact
+    fact = Fact(
+        entity="AI Market",
+        attribute="Size 2024",
+        value="$184B",
+        value_type=ValueType.CURRENCY.value,
+        confidence=Confidence.HIGH.value,
+        session_id="test-refactored-001",
+        source_quality=SourceQuality.A.value
+    )
+    sm.add_fact(fact)
+    print("✓ Added fact")
+
+    # Add an entity
+    entity = Entity(
+        entity_name="OpenAI",
+        entity_type="company",
+        session_id="test-refactored-001",
+        description="AI research company"
+    )
+    sm.add_entity(entity)
+    print("✓ Added entity")
+
+    # Add a citation
+    citation = Citation(
+        claim="AI market size is $184B in 2024",
+        session_id="test-refactored-001",
+        author="Gartner",
+        publication_date="2024-01",
+        url="https://www.gartner.com/example",
+        quality_rating=SourceQuality.A.value,
+        complete=True
+    )
+    sm.add_citation(citation)
+    print("✓ Added citation")
+
+    # Get statistics
+    stats = sm.get_session_statistics("test-refactored-001")
+    print(f"\n✓ Session Statistics:")
+    print(f"  - Agents: {stats['agents']['total']}")
+    print(f"  - GoT Nodes: {stats['got_nodes']}")
+    print(f"  - Facts: {stats['facts']}")
+    print(f"  - Entities: {stats['entities']}")
+    print(f"  - Citations: {stats['citations']['total']}")
+
+    sm.close()
+    print("\n✅ StateManager v2.0 test completed successfully!")

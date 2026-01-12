@@ -1,6 +1,7 @@
 # Research outputs (keep structure, ignore content)
 RESEARCH/*/
 !RESEARCH/.example/
+node_modules/
 
 # Python
 __pycache__/

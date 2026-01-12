@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Citation Validation Schema",
+  "description": "Schema for citation validation and quality assessment",
+  "definitions": {
+    "CitationObject": {
+      "type": "object",
+      "required": ["claim"],
+      "properties": {
+        "claim": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "page_numbers": {
+          "type": "string"
+        }
+      }
+    },
+    "ValidationReport": {
+      "type": "object",
+      "properties": {
+        "total_citations": {
+          "type": "integer"
+        },
+        "complete_citations": {
+          "type": "integer"
+        },
+        "accessible_urls": {
+          "type": "integer"
+        },
+        "quality_distribution": {
+          "type": "object",
+          "properties": {
+            "A": {"type": "integer"},
+            "B": {"type": "integer"},
+            "C": {"type": "integer"},
+            "D": {"type": "integer"},
+            "E": {"type": "integer"}
+          }
+        }
+      }
+    }
+  }
+}
