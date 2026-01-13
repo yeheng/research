@@ -200,7 +200,7 @@ Every Question Refiner execution must output:
 ### 4. Next Steps
 
 ```markdown
-**Recommended Next Action**: [research-executor | got-controller | none]
+**Recommended Next Action**: [research-executor | got-agent | none]
 **Reason**: [why this is the next step]
 **Handoff Data**: [the structured prompt for the next skill]
 ```

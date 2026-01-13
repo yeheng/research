@@ -94,37 +94,6 @@ All research skills use this unified A-E rating system for source quality assess
 - **D-rated**: Use only for emerging topics, mark as preliminary
 - **E-rated**: Flag for removal or replacement
 
-### D - Weak Sources (Low Confidence)
-
-**Criteria**:
-
-- Preprints (not yet peer-reviewed)
-- Conference abstracts only
-- Preliminary research
-- Blog posts without editorial oversight
-- Crowdsourced content (Reddit, Quora)
-
-**Examples**: arXiv preprints, Medium posts, Stack Overflow, individual blogs
-
-**Use for**: Preliminary findings, community insights (with caveat)
-
----
-
-### E - Very Poor Sources (Minimal Confidence)
-
-**Criteria**:
-
-- Anonymous content
-- Content with clear bias/conflict of interest
-- Outdated sources (>10 years old unless historical)
-- Content from unknown publishers
-- Broken or suspicious links
-- Press releases without third-party verification
-
-**Examples**: Personal blogs, PR Newswire (biased), content farms, promotional materials
-
-**Use for**: Should generally be avoided; if used, must be verified
-
 ---
 
 ## Usage Guidelines

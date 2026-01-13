@@ -171,6 +171,97 @@ Monitor and report research progress:
 }
 ```
 
+### 6. Progress Log Integration
+
+**CRITICAL**: Create and maintain `progress.md` throughout research execution.
+
+#### Initialize Progress Log (Phase 0)
+
+```python
+def initialize_progress_log(session_id, topic, output_dir):
+    progress_path = f"{output_dir}/progress.md"
+    content = f"""# Research Progress Log
+
+## Session Information
+- **Session ID**: {session_id}
+- **Topic**: {topic}
+- **Started**: {timestamp()}
+- **Status**: initializing
+
+---
+
+## Phase Execution
+"""
+    write_file(progress_path, content)
+    return progress_path
+```
+
+#### Log Phase Start/Complete
+
+```python
+def log_phase(progress_path, phase_num, phase_name, status, details=None):
+    entry = f"""
+### [{timestamp()}] Phase {phase_num}: {phase_name}
+- **Status**: {status}
+"""
+    if details:
+        for key, value in details.items():
+            entry += f"- **{key}**: {value}\n"
+    append_to_file(progress_path, entry)
+```
+
+#### Log Agent Operations
+
+```python
+def log_agent_deployment(progress_path, agent_id, agent_type, focus, status):
+    entry = f"| {agent_id} | {agent_type} | {focus} | {status} | - |\n"
+    append_to_table(progress_path, "Agent Deployments", entry)
+
+def log_agent_completion(progress_path, agent_id, findings_count, status):
+    update_table_row(progress_path, "Agent Deployments", agent_id,
+                     status=status, findings=f"{findings_count} facts")
+```
+
+#### Log MCP Tool Calls
+
+```python
+def log_mcp_call(progress_path, tool_name, input_size, output_summary, cached):
+    entry = f"| {timestamp()} | {tool_name} | {input_size} | {output_summary} | {'Yes' if cached else 'No'} |\n"
+    append_to_table(progress_path, "MCP Tool Calls", entry)
+```
+
+#### Log Errors and Recovery
+
+```python
+def log_error(progress_path, error_code, message, recovery_action):
+    entry = f"- ⚠️ [{timestamp()}] {error_code}: {message}\n  - Recovery: {recovery_action}\n"
+    append_to_section(progress_path, "Errors", entry)
+```
+
+#### Update Resource Usage
+
+```python
+def update_resource_usage(progress_path, tokens_used, time_elapsed, agents_used):
+    update_section(progress_path, "Resource Usage", f"""
+| Resource | Used | Budget | Percentage |
+|----------|------|--------|------------|
+| Tokens | {tokens_used} | 100,000 | {tokens_used/1000:.0f}% |
+| Time | {time_elapsed} min | 60 min | {time_elapsed/60*100:.0f}% |
+| Agents | {agents_used} | 8 | {agents_used/8*100:.0f}% |
+""")
+```
+
+**Required Logging Points**:
+1. ✅ Session start (initialize_progress_log)
+2. ✅ Each phase start/complete (log_phase)
+3. ✅ Each agent deployment (log_agent_deployment)
+4. ✅ Each agent completion (log_agent_completion)
+5. ✅ All MCP tool calls (log_mcp_call)
+6. ✅ All errors with recovery (log_error)
+7. ✅ Resource usage updates (every 5 minutes or phase change)
+
+**Template Location**: `.claude/shared/templates/progress_log_template.md`
+
 ## Communication Protocol
 
 ### Research Context Assessment
@@ -419,6 +510,8 @@ documents = {
 - [ ] Quality gates enforced at each checkpoint
 - [ ] Agent failures handled with recovery strategies
 - [ ] Progress tracked and reported to user
+- [ ] **Progress log created**: `RESEARCH/[topic]/progress.md` initialized at start
+- [ ] **Progress log updated**: All phases, agents, MCP calls logged
 - [ ] Parallel agent deployment used (single message)
 - [ ] **MCP tools used in Phase 3**: entity-extract, batch-fact-extract, batch-source-rate
 - [ ] **MCP tools used in Phase 4**: fact-extract, conflict-detect

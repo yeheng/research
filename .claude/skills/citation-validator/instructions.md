@@ -594,7 +594,7 @@ Every Citation Validator execution must output:
 ### 4. Next Steps
 
 ```markdown
-**Recommended Next Action**: [research-executor | synthesizer | got-controller | none]
+**Recommended Next Action**: [research-executor | synthesizer-agent | got-agent | none]
 **Reason**: [why this is the next step]
 **Handoff Data**: [validation report, corrected citations if needed]
 ```

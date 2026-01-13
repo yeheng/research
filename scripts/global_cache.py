@@ -5,6 +5,16 @@ Global Knowledge Cache - Cross-session knowledge persistence.
 Manages a global knowledge base that persists across research sessions,
 enabling reuse of previously analyzed content, facts, and entity graphs.
 
+IMPORTANT: This is DIFFERENT from other caching mechanisms:
+- MCP Cache (cache-manager.ts): In-memory, single-session deduplication
+- StateManager: Session-specific state (per-research database)
+- GlobalCache: Cross-session persistent knowledge (shared across all research)
+
+Use cases:
+- Avoid re-fetching the same URL across different research topics
+- Reuse fact extractions from previously analyzed content
+- Build cumulative entity knowledge graph over time
+
 Usage:
     python3 scripts/global_cache.py init                      # Initialize global cache
     python3 scripts/global_cache.py check <url>               # Check if URL is cached
@@ -13,6 +23,8 @@ Usage:
     python3 scripts/global_cache.py facts <entity>            # Query cached facts
     python3 scripts/global_cache.py stats                     # Show cache statistics
     python3 scripts/global_cache.py clean [--max-age DAYS]    # Clean stale entries
+
+Location: ~/.claude/global_knowledge_base/
 """
 
 import argparse

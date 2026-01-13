@@ -69,8 +69,8 @@ Read: RESEARCH/[topic]/data/processed/source_id_cleaned.md
 |-------|-------------|------------------|----------|
 | question-refiner | 10k | N/A | Minimal context |
 | research-executor | 50k | 10k per source | Pipeline required |
-| got-controller | 50k | 5k per node | Aggressive pruning |
-| synthesizer | 80k | 15k per agent output | Hierarchical synthesis |
+| got-agent | 50k | 5k per node | Aggressive pruning |
+| synthesizer-agent | 80k | 15k per agent output | Hierarchical synthesis |
 | citation-validator | 30k | 5k per document | Validate in batches |
 
 ---
@@ -220,7 +220,7 @@ python3 scripts/vector_store.py query "key facts"
 - 10k for source content (processed)
 ```
 
-### got-controller
+### got-agent
 
 ```markdown
 ## Token Optimization
@@ -235,7 +235,7 @@ python3 scripts/vector_store.py query "key facts"
 **State Checkpointing**: Every 3 operations
 ```
 
-### synthesizer
+### synthesizer-agent
 
 ```markdown
 ## Token Optimization
