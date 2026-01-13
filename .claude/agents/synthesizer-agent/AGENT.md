@@ -1,5 +1,5 @@
 ---
-name: synthesizer
+name: synthesizer-agent
 description: Aggregates findings from multiple research agents, resolves contradictions, builds consensus narratives, and generates comprehensive research reports
 tools: fact-extract, entity-extract, conflict-detect, citation-validate, Read, Write
 ---

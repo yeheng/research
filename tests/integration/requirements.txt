@@ -1,0 +1,41 @@
+# Integration Test Requirements for Deep Research Framework v2.0
+
+# Core testing framework
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+pytest-timeout>=2.1.0
+pytest-mock>=3.11.0
+
+# Async support
+asyncio>=3.4.3
+
+# Mocking and fixtures
+pytest-fixtures>=0.1.0
+
+# Reporting
+pytest-html>=3.2.0
+pytest-json-report>=1.5.0
+
+# Code quality
+pytest-clarity>=1.0.0
+
+# Type checking (optional, for test code)
+mypy>=1.4.0
+
+# Linting (optional)
+pylint>=2.17.0
+
+# For test data handling
+pyyaml>=6.0
+
+# For test reports
+jinja2>=3.1.0
+
+# Optional: For performance profiling
+pytest-benchmark>=4.0.0
+memory-profiler>=0.61.0
+
+# Development dependencies
+black>=23.7.0
+isort>=5.12.0

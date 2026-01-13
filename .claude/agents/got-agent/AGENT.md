@@ -1,5 +1,5 @@
 ---
-name: got-controller
+name: got-agent
 description: Manage Graph of Thoughts research optimization through intelligent path generation, scoring, aggregation, and pruning operations
 tools: StateManager, WebSearch, WebFetch, Read, Write, fact-extract, conflict-detect, source-rate
 ---
