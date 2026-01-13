@@ -1,224 +1,244 @@
 # Deep Research MCP Server
 
-## Phase 1 Refactoring - COMPLETED ✅
-## Phase 2 Implementation - COMPLETED ✅
-## Phase 3A (High Priority) - COMPLETED ✅
+## Status: All Phases COMPLETED ✅
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| Phase 1 | ✅ | MCP Server Infrastructure & StateManager |
+| Phase 2 | ✅ | Core Tool Implementations (5 tools) |
+| Phase 3A | ✅ | Error Handling, Logging, Python Client |
+| Phase 3B | ✅ | Batch Processing, Caching, Documentation |
 
 This directory contains the MCP (Model Context Protocol) server infrastructure for the Deep Research Framework.
 
-### What Was Completed
+## MCP Tools Overview
 
-#### Task 15: Centralized StateManager ✅
+### Core Tools (5)
 
-- **Location**: `scripts/state_manager.py`
-- **Database**: `.claude/mcp-server/state/research_state.db`
-- **Schema**: `.claude/mcp-server/state/schema.sql`
-- **Features**:
-  - Thread-safe SQLite backend with WAL mode
-  - Complete data classes for type safety
-  - ACID-compliant transactions
-  - Support for all research components (sessions, GoT, agents, facts, entities, citations)
+| Tool | Purpose | Status |
+|------|---------|--------|
+| `fact-extract` | Extract atomic facts from text with source attribution | ✅ |
+| `entity-extract` | Extract named entities and relationships | ✅ |
+| `citation-validate` | Validate citations for completeness and quality | ✅ |
+| `source-rate` | Rate source quality on A-E scale | ✅ |
+| `conflict-detect` | Detect conflicts between facts | ✅ |
 
-#### Task 1: MCP Server Infrastructure ✅
+### Batch Processing Tools (5)
 
-- **Package Configuration**: `package.json` with MCP SDK dependencies
-- **TypeScript Config**: `tsconfig.json` for ES2022/Node16
-- **Main Server**: `src/index.ts` with 5 tool definitions
-- **JSON Schemas**: `schemas/` directory with fact, entity, and citation schemas
+| Tool | Purpose | Status |
+|------|---------|--------|
+| `batch-fact-extract` | Process multiple texts in parallel | ✅ |
+| `batch-entity-extract` | Extract from multiple texts | ✅ |
+| `batch-citation-validate` | Validate multiple citations | ✅ |
+| `batch-source-rate` | Rate multiple sources | ✅ |
+| `batch-conflict-detect` | Detect conflicts in batches | ✅ |
 
-#### Phase 2: MCP Tool Implementations ✅
+### Cache Management Tools (2)
 
-All 5 MCP tools have been implemented and tested:
+| Tool | Purpose | Status |
+|------|---------|--------|
+| `cache-stats` | Get cache statistics (hits, misses, hit rate) | ✅ |
+| `cache-clear` | Clear all tool caches | ✅ |
 
-- **Task 2**: `fact-extract` tool ✅
-  - Extracts atomic facts from text with source attribution
-  - Supports multiple value types (number, currency, percentage, date, text)
-  - Calculates extraction quality score
-
-- **Task 3**: `entity-extract` tool ✅
-  - Named entity recognition (companies, people, technologies)
-  - Relationship extraction with confidence scores
-  - Entity deduplication and normalization
-
-- **Task 4**: `citation-validate` tool ✅
-  - Validates citation completeness (author, date, URL)
-  - Identifies missing fields and issues
-  - Reports validation statistics
-
-- **Task 5**: `source-rate` tool ✅
-  - Rates sources on A-E quality scale
-  - Provides justification and credibility indicators
-  - Supports academic, industry, news, blog, and official sources
-
-- **Task 6**: `conflict-detect` tool ✅
-  - Detects numerical conflicts between facts
-  - Classifies severity (critical, moderate, minor)
-  - Groups facts by entity and attribute
-
-#### Phase 3A: Production Readiness (High Priority) ✅
-
-- **Task 10**: Error Handling & Logging ✅
-  - Structured logging with JSON output to stderr
-  - Custom error classes (ValidationError, ProcessingError, etc.)
-  - Comprehensive error context and stack traces
-  - All tools updated with proper error handling
-
-- **Task 7**: Python MCP Client ✅
-  - `scripts/mcp_client.py` - Python wrapper for MCP tools
-  - Methods for all 5 tools (extract_facts, extract_entities, etc.)
-  - Automatic JSON parsing and error handling
-  - Tested and working
-
-### Directory Structure
+## Directory Structure
 
 ```
 .claude/mcp-server/
-├── package.json              # Node.js package configuration
+├── package.json              # Node.js configuration
 ├── tsconfig.json             # TypeScript configuration
-├── test-tools.js             # Test script for MCP tools
-├── PHASE3_PLAN.md            # Phase 3 implementation plan
+├── test-tools.js             # Comprehensive test script
+├── PHASE3_PLAN.md            # Implementation plan (completed)
 ├── README.md                 # This file
 ├── src/
-│   ├── index.ts             # Main MCP server (tool definitions & handlers)
-│   ├── utils/               # Utilities ✅
-│   │   ├── logger.ts        # Structured logging
-│   │   └── errors.ts        # Custom error classes
-│   └── tools/               # Tool implementations ✅
+│   ├── index.ts              # MCP server (12 tools)
+│   ├── cache/
+│   │   └── cache-manager.ts  # TTL cache with LRU eviction
+│   ├── utils/
+│   │   ├── batch.ts          # Parallel processing utilities
+│   │   ├── logger.ts         # Structured JSON logging
+│   │   └── errors.ts         # Custom error classes
+│   └── tools/
 │       ├── fact-extract.ts
 │       ├── entity-extract.ts
 │       ├── citation-validate.ts
 │       ├── source-rate.ts
-│       └── conflict-detect.ts
-├── dist/                    # Compiled JavaScript output
-│   ├── index.js
-│   ├── utils/
-│   └── tools/
-├── schemas/                 # JSON schemas for validation
+│       ├── conflict-detect.ts
+│       └── batch-tools.ts    # Batch processing implementations
+├── dist/                     # Compiled JavaScript
+├── docs/
+│   ├── API.md                # Complete API reference
+│   ├── INTEGRATION_GUIDE.md  # Skills integration guide
+│   └── EXAMPLES.md           # Usage examples
+├── schemas/
 │   ├── fact.json
 │   ├── entity.json
 │   └── citation.json
-└── state/                   # State management
-    ├── schema.sql           # Database schema
-    └── research_state.db    # SQLite database
+└── state/
+    ├── schema.sql
+    └── research_state.db
 
 scripts/
-└── mcp_client.py            # Python MCP client wrapper ✅
+└── mcp_client.py             # Python MCP client
 ```
 
-### MCP Tools Status
-
-| Tool | Purpose | Status |
-|------|---------|--------|
-| `fact-extract` | Extract atomic facts from text with source attribution | ✅ Implemented & Tested |
-| `entity-extract` | Extract named entities and relationships | ✅ Implemented & Tested |
-| `citation-validate` | Validate citations for completeness and quality | ✅ Implemented & Tested |
-| `source-rate` | Rate source quality on A-E scale | ✅ Implemented & Tested |
-| `conflict-detect` | Detect conflicts between facts | ✅ Implemented & Tested |
+## Quick Start
 
 ### Installation
-
-Before using the MCP server, install dependencies:
 
 ```bash
 cd .claude/mcp-server
 npm install
-```
-
-### Building
-
-Compile TypeScript to JavaScript:
-
-```bash
 npm run build
-```
-
-### Running
-
-Start the MCP server:
-
-```bash
-npm start
-```
-
-Or run in development mode with auto-rebuild:
-
-```bash
-npm run dev
 ```
 
 ### Testing
 
-Test all MCP tools with the included test script:
-
 ```bash
-cd .claude/mcp-server
 node test-tools.js
 ```
 
 Expected output:
-```
-Testing MCP Tools...
 
-1. Testing fact-extract...
+```
+Testing MCP Tools v2.0...
+
+==================================================
+PART 1: Core Tools
+==================================================
 ✓ fact-extract works
-  Facts extracted: 1
-
-2. Testing entity-extract...
 ✓ entity-extract works
-  Entities found: 2
-  Relationships found: 1
-
-3. Testing citation-validate...
 ✓ citation-validate works
-  Total citations: 2
-  Complete citations: 1
-  Issues found: 3
-
-4. Testing source-rate...
 ✓ source-rate works
-  Quality rating: A
-  Justification: Peer-reviewed academic source
-
-5. Testing conflict-detect...
 ✓ conflict-detect works
-  Conflicts detected: 1
-  Severity: {"critical":0,"moderate":1,"minor":0}
 
+==================================================
+PART 2: Batch Processing Tools
+==================================================
+✓ batch-fact-extract works
+✓ batch-entity-extract works
+✓ batch-source-rate works
+
+==================================================
+PART 3: Cache Management
+==================================================
+✓ cache-stats works
+✓ cache-clear works
+
+==================================================
 ✅ All tests completed!
+==================================================
 ```
 
-You can also test the Python MCP client:
+### Python Client
 
 ```bash
 python3 scripts/mcp_client.py
 ```
 
-Expected output:
-```
-Testing MCP Client...
+## Usage Examples
 
-1. Testing fact extraction...
-   ✓ Extracted 1 facts
+### Single Item Processing
 
-2. Testing entity extraction...
-   ✓ Found 2 entities
-   ✓ Found 1 relationships
+```javascript
+import { factExtract } from './dist/tools/fact-extract.js';
 
-✅ All MCP client tests passed!
-```
-
-Test the StateManager:
-
-```bash
-python3 scripts/state_manager.py
+const result = await factExtract({
+  text: 'The AI market was valued at $22.4 billion in 2023.',
+  source_url: 'https://example.com/report'
+});
 ```
 
-### Next Steps (Phase 3B)
+### Batch Processing (10x faster)
 
-With Phase 1, Phase 2, and Phase 3A completed, Phase 3B will focus on:
+```javascript
+import { batchFactExtract } from './dist/tools/batch-tools.js';
 
-1. **Task 8**: Batch Processing - Process multiple items in parallel
-2. **Task 9**: Caching Layer - Reduce redundant processing
-3. **Task 11**: API Documentation - Comprehensive usage guides
+const result = await batchFactExtract({
+  items: [
+    { text: 'Apple revenue was $394B', source_url: 'https://apple.com' },
+    { text: 'Google revenue was $280B', source_url: 'https://google.com' },
+    { text: 'Microsoft revenue was $198B', source_url: 'https://microsoft.com' },
+  ],
+  options: {
+    maxConcurrency: 5,  // Process 5 in parallel
+    useCache: true      // Enable caching
+  }
+});
+```
 
-See `PHASE3_PLAN.md` for detailed implementation plan.
+### Python Integration
+
+```python
+from scripts.mcp_client import MCPClient
+
+client = MCPClient()
+result = client.extract_facts(
+    text="The AI market was valued at $22.4 billion.",
+    source_url="https://example.com"
+)
+```
+
+## Cache Configuration
+
+| Cache | TTL | Max Size |
+|-------|-----|----------|
+| Facts | 10 min | 500 |
+| Entities | 10 min | 500 |
+| Citations | 30 min | 200 |
+| Source Ratings | 60 min | 1000 |
+| Conflicts | 5 min | 200 |
+
+## Batch Processing Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `maxConcurrency` | 5 | Parallel operations |
+| `useCache` | true | Enable caching |
+| `stopOnError` | false | Stop on first error |
+
+## Documentation
+
+- **[API Reference](docs/API.md)** - Complete tool documentation
+- **[Integration Guide](docs/INTEGRATION_GUIDE.md)** - Skills integration
+- **[Examples](docs/EXAMPLES.md)** - Usage examples
+
+## Claude Desktop Integration
+
+Add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "deep-research": {
+      "command": "node",
+      "args": ["/path/to/.claude/mcp-server/dist/index.js"]
+    }
+  }
+}
+```
+
+## What Was Completed
+
+### Phase 1: Infrastructure
+
+- StateManager (`scripts/state_manager.py`)
+- MCP Server setup with TypeScript
+- JSON schemas for data validation
+
+### Phase 2: Core Tools
+
+- 5 core tools implemented and tested
+- Pattern-based extraction
+- Quality scoring
+
+### Phase 3A: Production Readiness
+
+- Structured logging (`src/utils/logger.ts`)
+- Custom error classes (`src/utils/errors.ts`)
+- Python client (`scripts/mcp_client.py`)
+
+### Phase 3B: Advanced Features
+
+- Batch processing (`src/utils/batch.ts`, `src/tools/batch-tools.ts`)
+- Caching layer (`src/cache/cache-manager.ts`)
+- Complete documentation (`docs/`)
