@@ -1,251 +1,331 @@
 ---
-description: 对指定主题执行完整的深度研究流程，从问题细化到最终报告生成
-argument-hint: [研究主题或问题]
-allowed-tools: Task, WebSearch, WebFetch, mcp__web_reader__webReader, Read, Write, TodoWrite, mcp__zai-mcp-server__analyze_image, mcp__zai-mcp-server__analyze_data_visualization
+description: Execute comprehensive deep research workflow using the refactored agent-based architecture
+argument-hint: [research topic or question]
+allowed-tools: Task, WebSearch, WebFetch, mcp__web_reader__webReader, Read, Write, TodoWrite, Skill
 ---
 
-# Deep Research Command
+# Deep Research Command (v2.0 - Refactored)
 
-执行完整的 7 阶段深度研究流程，使用 Graph of Thoughts 框架优化研究质量。
+Execute the complete 7-phase deep research workflow using the **refactored agent-based architecture** with enhanced skill separation and autonomous agent coordination.
 
-## 研究主题
+## Research Topic
 
 $ARGUMENTS
 
 ---
 
-## 前置检查
+## Architecture Overview (Post-Refactoring)
 
-### 1. 增量研究检测
+```
+User → deep-research command
+       ↓
+   question-refiner skill → structured prompt
+       ↓
+   research-planner skill → execution plan (OPTIONAL)
+       ↓
+   research-executor skill → validates & invokes agent
+       ↓
+   research-orchestrator-agent → executes all 7 phases
+       ↓
+   RESEARCH/[topic]/ → final output
+```
 
-**首先检查是否已存在相关研究：**
+**Key Changes from v1.0**:
+- Skills are now thin wrappers that delegate to agents
+- Orchestrator agent handles all phase logic
+- Better separation: Skills = validation, Agents = execution
+- StateManager tracks all research state centrally
+
+---
+
+## Pre-Execution Check
+
+### 1. Incremental Research Detection
+
+**Check for existing research**:
 
 ```bash
-# 检查 RESEARCH 目录
 ls -la RESEARCH/ 2>/dev/null || echo "No existing research"
 ```
 
-**如果存在相同主题的研究：**
+**If research exists for this topic**:
 
-| 模式 | 操作 | 适用场景 |
-|------|------|----------|
-| **Update** | 刷新最新信息，保持结构 | 需要更新数据 |
-| **Expand** | 添加新子主题 | 需要扩展范围 |
-| **Restart** | 归档旧版本，重新开始 | 需要重新研究 |
+| Mode | Action | Use When |
+|------|--------|----------|
+| **Update** | Refresh with latest info | Data needs updating |
+| **Expand** | Add new subtopics | Scope needs expansion |
+| **Restart** | Archive old, start fresh | Complete redo needed |
 
-询问用户选择模式后再继续。
-
----
-
-## 研究流程 (7 阶段)
-
-### Phase 1: Question Refinement
-
-使用 **question-refiner** 技能执行：
-
-1. **研究类型检测**
-   - Exploratory: 当前状态、趋势、全景
-   - Comparative: X vs Y 对比
-   - Problem-Solving: 解决方案导向
-   - Forecasting: 趋势预测
-   - Deep Dive: 技术深度分析
-
-2. **渐进式提问** (3-5 个核心问题)
-   - 具体关注点
-   - 输出格式需求
-   - 目标受众
-   - 范围限制
-
-3. **生成结构化提示词**
-   - TASK: 清晰的研究目标
-   - CONTEXT: 研究背景和意义
-   - SPECIFIC_QUESTIONS: 3-7 个具体子问题
-   - KEYWORDS: 搜索关键词
-   - CONSTRAINTS: 时间、地域、来源类型
-   - OUTPUT_FORMAT: 交付物规格
-
-> 📋 结构化提示词质量目标: ≥ 8/10
+Ask user which mode before proceeding.
 
 ---
 
-### Phase 2: Research Planning
+## Refactored Workflow
 
-1. **分解主题** → 3-7 个子主题
-2. **生成搜索策略** → 每个子主题 3-5 个搜索查询
-3. **确定数据源** → 根据约束选择合适来源
-4. **多智能体部署策略**
+### Phase 0: Question Refinement (skill-based)
 
-| 研究类型 | 子主题数 | 智能体数 | 模型选择 |
-|---------|---------|---------|---------|
-| 快速查询 | 1-2 | 2-3 | 全部 haiku |
-| 标准研究 | 3-5 | 4-5 | 2 sonnet + 3 haiku |
-| 深度研究 | 5-7 | 6-8 | 3-4 sonnet + 其余 haiku |
+**Use `question-refiner` skill**:
 
-**输出**: 研究计划文档 → 等待用户确认后继续
+```markdown
+Invoke question-refiner to transform raw question into structured prompt:
 
----
+1. **Research Type Detection** (automatic)
+   - Exploratory, Comparative, Problem-Solving, etc.
 
-### Phase 3: Multi-Agent Research
+2. **Progressive Questioning** (3-5 core questions)
+   - Specific focus areas
+   - Output format requirements
+   - Target audience
+   - Scope limitations
 
-**并行部署研究智能体：**
+3. **Structured Prompt Generation** (validated)
+   - TASK: Clear research objective
+   - CONTEXT: Background and significance
+   - SPECIFIC_QUESTIONS: 3-7 concrete sub-questions
+   - KEYWORDS: Search terms + synonyms
+   - CONSTRAINTS: Time, geography, sources
+   - OUTPUT_FORMAT: Deliverable specs
+   - QUALITY_METRICS: Completeness, specificity scores
 
-```
-# 必须在单次响应中启动所有智能体
-Task(agent_1, "Research aspect A: [具体焦点]...")
-Task(agent_2, "Research aspect B: [具体焦点]...")
-Task(agent_3, "Research aspect C: [具体焦点]...")
-Task(agent_4, "Cross-reference verification...")
+4. **Output Validation** (automatic)
+   - JSON schema validation
+   - Quality score ≥ 8.0 required
+   - Automatic refinement if needed
 ```
 
-**智能体类型：**
-
-| 类型 | 数量 | 职责 |
-|------|------|------|
-| Web Research | 3-5 | 当前信息、趋势、新闻 |
-| Academic/Technical | 1-2 | 论文、技术规格 |
-| Cross-Reference | 1 | 事实核查、验证 |
-
-**Token 优化 (关键!)：**
-
-1. WebFetch 后立即保存到 `data/raw/`
-2. 运行预处理脚本清理内容
-3. 从 `data/processed/` 读取清理后的内容
-
-> ⚠️ 禁止直接将 WebFetch 原始内容放入上下文
+**Output**: Validated structured research prompt
 
 ---
 
-### Phase 4: Source Triangulation
+### Phase 0.5: Research Planning (OPTIONAL)
 
-使用 **citation-validator** 技能执行：
+**Use `research-planner` skill**:
 
-1. **编译所有发现**
-2. **识别共识** (多源支持 = 高置信度)
-3. **标注矛盾**
-4. **评估来源质量** (A-E 评级)
+```markdown
+Optionally generate detailed execution plan before committing:
 
-> 📋 参考 `.claude/shared/constants/source_quality_ratings.md`
+Ask user: "Would you like to review the research plan before execution?"
 
----
+If yes:
+1. Invoke research-planner with structured prompt
+2. Generate plan with:
+   - Subtopic decomposition (3-7 subtopics)
+   - Search strategies (3-5 queries per subtopic)
+   - Agent deployment configuration
+   - Resource estimation (time, cost, tokens)
+   - Quality gates
+3. Present plan to user for approval
+4. Allow modifications if requested
+```
 
-### Phase 5: Knowledge Synthesis
+**Output**: Approved execution plan (optional)
 
-使用 **synthesizer** 技能执行：
-
-1. **组织内容** → 按主题分组，非按智能体
-2. **解决矛盾** → 数值差异、因果声明、时间变化
-3. **构建共识** → 强/中/弱/无共识
-4. **创建叙事** → 逻辑流程，渐进式披露
-
-**引用要求：**
-每个事实性声明必须包含：
-- Author/Organization
-- Publication Date
-- Source Title
-- URL/DOI
-
-> 📋 参考 `.claude/shared/templates/citation_format.md`
+**Benefits**:
+- User understands what will be researched
+- Transparent resource estimates
+- Can modify before committing
+- Strategic review opportunity
 
 ---
 
-### Phase 6: Quality Assurance
+### Phase 1-7: Research Execution (agent-based)
 
-**验证链 (Chain-of-Verification)：**
+**Use `research-executor` skill → `research-orchestrator-agent`**:
 
-1. 为每个关键声明生成验证问题
-2. 独立搜索验证
-3. 交叉引用结果
+```markdown
+Invoke research-executor with structured prompt:
 
-**质量检查清单：**
+The skill will:
+1. Validate prompt completeness
+2. Prepare agent context
+3. Invoke research-orchestrator-agent
+4. Monitor progress
+5. Return results
 
-- [ ] 每个声明都有可验证来源
-- [ ] 多个来源支持关键发现
-- [ ] 矛盾已确认并解释
-- [ ] 来源最新且权威
-- [ ] 无幻觉或无支持声明
-- [ ] 引用格式一致
-- [ ] 所有 URL 可访问
+The agent will autonomously execute:
+├── Phase 1: Question Refinement (validate)
+├── Phase 2: Research Planning (if not done in Phase 0.5)
+├── Phase 3: Multi-Agent Deployment (parallel)
+│   ├── Web research agents (3-5)
+│   ├── Academic/technical agents (1-2)
+│   └── Cross-reference agent (1)
+├── Phase 4: Source Triangulation (conflict detection)
+├── Phase 5: Knowledge Synthesis (synthesizer-agent)
+├── Phase 6: Quality Assurance (red-team-agent)
+└── Phase 7: Output Generation (structured files)
+```
 
-**质量目标：** ≥ 8/10
+**Key Difference**: All orchestration logic is now in the agent, not the skill.
 
 ---
 
-### Phase 7: Output Generation
+## Agent Coordination (Behind the Scenes)
 
-**创建输出目录结构：**
+The research-orchestrator-agent will invoke:
+
+### Supporting Agents
+1. **ontology-scout-agent** (if unfamiliar domain)
+   - Domain reconnaissance
+   - Terminology mapping
+   - Taxonomy building
+
+2. **got-agent** (if complex topic, optional)
+   - Graph of Thoughts optimization
+   - Path scoring and pruning
+   - Quality-driven exploration
+
+3. **Research Agents** (3-8 parallel)
+   - Web research (haiku/sonnet mix)
+   - Academic research (sonnet)
+   - Cross-reference verification (haiku)
+
+4. **synthesizer-agent** (Phase 5)
+   - Aggregate findings
+   - Resolve contradictions
+   - Build consensus narrative
+   - Generate structured reports
+
+5. **red-team-agent** (Phase 6)
+   - Adversarial validation
+   - Counter-evidence search
+   - Bias detection
+   - Confidence adjustment
+
+### MCP Tools Used by Agents
+- `fact-extract`: Extract atomic facts
+- `entity-extract`: Build knowledge graph
+- `citation-validate`: Verify citations
+- `source-rate`: A-E quality ratings
+- `conflict-detect`: Find contradictions
+
+### StateManager Integration
+- Tracks research session state
+- Manages GoT graph (if used)
+- Coordinates agent statuses
+- Stores fact ledger
+- Maintains entity graph
+- Records citations
+
+---
+
+## Output Structure
 
 ```
 RESEARCH/[topic]/
-├── README.md                    # 概述和导航
-├── executive_summary.md         # 1-2 页摘要
-├── full_report.md               # 完整报告
+├── README.md                    # Overview and navigation
+├── executive_summary.md         # 1-2 page summary
+├── full_report.md               # Complete report
 ├── data/
-│   ├── raw/                     # 原始获取内容
-│   ├── processed/               # 清理后内容
-│   └── statistics.md            # 关键数据
+│   ├── raw/                     # Original fetched content
+│   ├── processed/               # Cleaned content
+│   ├── statistics.md            # Key numbers
+│   └── ontology/                # Domain taxonomy (if generated)
+│       └── taxonomy.json
 ├── sources/
-│   ├── bibliography.md          # 完整引用
-│   ├── source_quality_table.md  # A-E 评级
-│   └── citation_validation.md   # 验证报告
+│   ├── bibliography.md          # Complete citations
+│   ├── source_quality_table.md  # A-E ratings
+│   └── citation_validation.md   # Validation report
 ├── research_notes/
-│   └── agent_findings_summary.md
+│   ├── agent_findings_summary.md
+│   └── agent_status.json        # Execution metadata
 └── appendices/
     ├── methodology.md
-    └── limitations.md
+    ├── limitations.md
+    └── got_graph.json           # GoT graph state (if used)
 ```
 
-> 📋 参考 `.claude/shared/templates/report_structure.md` 选择合适模板
+---
+
+## Graph of Thoughts (Optional Enhancement)
+
+**When to use**:
+- Topic has multiple valid exploration paths
+- Quality optimization important
+- Budget allows iterative refinement
+
+**How it works**:
+1. research-orchestrator-agent detects complexity
+2. Invokes got-agent for path optimization
+3. GoT operations: Generate, Score, Aggregate, Refine, Prune
+4. Continues until quality threshold reached or budget exhausted
+
+**Operations**:
+| Operation | Purpose | Example |
+|-----------|---------|---------|
+| Generate(k) | Create k parallel paths | Explore 4 different angles |
+| Score | Rate quality (0-10) | Citation quality, completeness |
+| Aggregate(k) | Merge k paths | Combine 3 best findings |
+| Refine(1) | Improve path | Enhance quality of promising path |
+| KeepBestN(n) | Prune to top n | Keep top 3, discard rest |
 
 ---
 
-## Graph of Thoughts (可选增强)
+## Citation Requirements
 
-对于复杂主题，启用 GoT 控制器：
-
-**GoT 操作：**
-
-| 操作 | 用途 | 触发条件 |
-|------|------|----------|
-| Generate(k) | 创建 k 个并行研究路径 | 初始探索或深入高分节点 |
-| Aggregate(k) | 合并 k 个发现为综合 | 2-3 轮生成后 |
-| Refine(1) | 改进现有发现 | 分数 ≥ 6.0 需打磨 |
-| Score | 评估质量 (0-10) | 每个节点 |
-| KeepBestN(n) | 保留前 n 个节点 | 管理复杂度 |
-
-**决策矩阵：**
-
-| 分数 | 操作 | 原因 |
-|------|------|------|
-| ≥ 8.5 | Generate(2-3) | 高质量路径值得深入 |
-| 7.0-8.4 | Refine(1) | 内容良好，需打磨 |
-| 6.0-6.9 | Aggregate | 中等质量，合并提升 |
-| < 6.0 | Prune | 低质量，丢弃 |
-
----
-
-## 引用要求
-
-确保每个事实性声明包含：
-
+**Every factual claim must include**:
 1. ✅ Author/Organization name
 2. ✅ Publication date
 3. ✅ Source title
 4. ✅ Direct URL/DOI
-5. ✅ Page numbers (如适用)
+5. ✅ Page numbers (if applicable)
+
+**Source Quality Ratings (A-E)**:
+- **A**: Peer-reviewed, systematic reviews, RCTs
+- **B**: Industry reports, reputable analysts
+- **C**: News, expert opinion
+- **D**: Blogs, preliminary research
+- **E**: Anecdotal, theoretical
 
 ---
 
-## 成功指标
+## Success Metrics
 
-| 指标 | 目标 |
-|------|------|
-| 引用覆盖率 | 100% |
-| 引用完整性 | 100% |
-| 引用准确性 | ≥ 95% |
-| 来源质量平均 | B 或更高 |
-| 幻觉数量 | 0 |
-| 整体质量分数 | ≥ 8/10 |
+| Metric | Target |
+|--------|--------|
+| Citation coverage | 100% |
+| Citation completeness | 100% |
+| Citation accuracy | ≥ 95% |
+| Source quality average | B or higher |
+| Hallucination count | 0 |
+| Overall quality score | ≥ 8/10 |
 
 ---
 
-**开始深度研究流程。**
+## What's Different in v2.0?
+
+### v1.0 (Old Architecture)
+- ❌ Monolithic skills with embedded logic
+- ❌ Direct agent deployment from skills
+- ❌ Manual state management
+- ❌ Phase-by-phase execution in skills
+- ❌ Limited error recovery
+
+### v2.0 (Refactored Architecture)
+- ✅ Thin skill wrappers + autonomous agents
+- ✅ Orchestrator agent manages all phases
+- ✅ Centralized StateManager (SQLite)
+- ✅ Agent-level autonomy and error recovery
+- ✅ MCP tools for standardized data processing
+- ✅ Optional research planning phase
+- ✅ Enhanced question refinement with validation
+- ✅ Better separation of concerns
+
+---
+
+## Error Handling
+
+**Skill-Level Errors**:
+- E001: Incomplete prompt → Request clarification
+- E002: Agent deployment failed → Retry with fallback
+- E003: Execution timeout → Return partial results
+- E004: Quality below threshold → Trigger refinement
+
+**Agent-Level Errors**:
+- Handled autonomously by research-orchestrator-agent
+- Automatic retries and recovery
+- Quality gate enforcement
+- Fallback strategies
+
+---
+
+**Begin refactored deep research workflow.**

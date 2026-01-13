@@ -20,7 +20,12 @@
       "Bash(npm run build:*)",
       "Bash(node test-tools.js:*)",
       "Bash(test:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(for agent in /Users/yeheng/workspaces/research/template/.claude/agents/*/AGENT.md:*)",
+      "Bash(done:*)",
+      "Bash(grep:*)",
+      "Bash(for:*)",
+      "Bash(npm test:*)"
     ]
   },
   "research": {

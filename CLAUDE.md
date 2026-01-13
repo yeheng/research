@@ -132,23 +132,115 @@ RESEARCH/[topic_name]/
 - Apply Chain-of-Verification to prevent hallucinations
 - Use Graph of Thoughts to optimize research paths
 
-## Skills System
+## Refactored Architecture (v2.0)
+
+The framework uses a **3-layer architecture** with clear separation of concerns:
+
+```
+┌─────────────────────────────────────┐
+│  Layer 1: Skills (User-Invocable)   │
+│  - question-refiner                 │  ← Thin wrappers
+│  - research-planner (NEW)           │  ← Input validation
+│  - research-executor                │  ← Agent invocation
+└──────────────┬──────────────────────┘
+               │ invokes
+┌──────────────▼──────────────────────┐
+│  Layer 2: Agents (Autonomous)       │
+│  - research-orchestrator-agent      │  ← Master coordinator
+│  - got-agent                        │  ← Path optimization
+│  - red-team-agent                   │  ← Quality validation
+│  - synthesizer-agent                │  ← Findings aggregation
+│  - ontology-scout-agent             │  ← Domain recon
+└──────────────┬──────────────────────┘
+               │ uses
+┌──────────────▼──────────────────────┐
+│  Layer 3: Infrastructure            │
+│  - MCP Tools (5 core + 5 batch)     │  ← Data processing
+│  - StateManager (SQLite)            │  ← State tracking
+└─────────────────────────────────────┘
+```
+
+### Skills System
 
 Skills are located in `.claude/skills/`:
 
-| Skill | Purpose |
-|-------|---------|
-| `question-refiner` | Transform vague questions into structured prompts |
-| `research-executor` | Execute full 7-phase research process |
-| `got-controller` | Manage Graph of Thoughts for complex research |
-| `citation-validator` | Verify citation accuracy and source quality |
-| `synthesizer` | Combine findings from multiple agents |
+| Skill | Purpose | Type |
+|-------|---------|------|
+| `question-refiner` | Transform questions into structured prompts with validation | Enhanced ✨ |
+| `research-planner` | Create detailed execution plans with resource estimates | NEW 🆕 |
+| `research-executor` | Validate inputs and invoke research-orchestrator-agent | Refactored 🔧 |
+
+**Key Changes**:
+
+- Skills are now **thin wrappers** (~90% simpler)
+- All orchestration logic moved to agents
+- Enhanced input validation and output quality scoring
 
 Each skill has:
 
 - `SKILL.md`: YAML frontmatter + description
 - `instructions.md`: Detailed implementation guidance
 - `examples.md`: Usage examples
+
+### Agents System
+
+Agents are located in `.claude/agents/`:
+
+| Agent | Purpose | Autonomy Level |
+|-------|---------|----------------|
+| `research-orchestrator-agent` | Master coordinator for 7-phase workflow | Very High |
+| `got-agent` | Graph of Thoughts optimization | High |
+| `red-team-agent` | Adversarial validation | High |
+| `synthesizer-agent` | Findings aggregation & conflict resolution | High |
+| `ontology-scout-agent` | Domain reconnaissance & taxonomy building | Medium |
+
+**Agent Characteristics**:
+
+- Autonomous decision-making
+- Multi-step reasoning
+- Tool access (MCP + StateManager)
+- Error recovery capabilities
+
+Each agent has:
+
+- `AGENT.md`: YAML frontmatter + comprehensive workflow
+- Detailed phase-by-phase execution guide
+- Excellence checklist and best practices
+
+### MCP Tools
+
+MCP server located in `.claude/mcp-server/`:
+
+**Core Tools** (5):
+
+- `fact-extract`: Extract atomic facts with source attribution
+- `entity-extract`: Named entity recognition + relationships
+- `citation-validate`: Validate citation completeness and quality
+- `source-rate`: A-E quality rating for sources
+- `conflict-detect`: Detect contradictions between facts
+
+**Batch Tools** (5):
+
+- `batch-fact-extract`, `batch-entity-extract`, etc.
+- Parallel processing with caching
+- Intelligent deduplication
+
+**Cache Management** (2):
+
+- `cache-stats`: Get cache statistics
+- `cache-clear`: Clear all caches
+
+### State Management
+
+StateManager (`scripts/state_manager.py`):
+
+- Research sessions with lifecycle tracking
+- GoT graph state persistence
+- Agent coordination and monitoring
+- Fact ledger with conflict detection
+- Entity graph with relationships
+- Citation quality tracking
+- Thread-safe, ACID-compliant SQLite backend
 
 ## Tool Permissions
 
