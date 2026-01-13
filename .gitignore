@@ -74,3 +74,10 @@ data/processed/*.html
 # OS files
 Thumbs.db
 Desktop.ini
+
+repomix*
+.repomix*
+settings*.json
+.__pycache__
+.pytest_cache
+.benchmarks
