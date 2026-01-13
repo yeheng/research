@@ -18,7 +18,9 @@
       "Skill(research-executor)",
       "Bash(find:*)",
       "Bash(npm run build:*)",
-      "Bash(node test-tools.js:*)"
+      "Bash(node test-tools.js:*)",
+      "Bash(test:*)",
+      "Bash(wc:*)"
     ]
   },
   "research": {
