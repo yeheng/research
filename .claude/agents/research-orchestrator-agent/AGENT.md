@@ -175,6 +175,14 @@ Monitor and report research progress:
 
 **CRITICAL**: Create and maintain `progress.md` throughout research execution.
 
+**Token Efficiency Guidelines**:
+
+1. ✅ **Append-only writes** - Never re-read entire log
+2. ✅ **Structured format** - Use tables for agents/MCP calls
+3. ✅ **Summary sections** - Not full details
+4. ✅ **Reference other files** - Don't duplicate content
+5. ✅ **Compact format** - One line per event
+
 #### Initialize Progress Log (Phase 0)
 
 ```python
@@ -191,23 +199,58 @@ def initialize_progress_log(session_id, topic, output_dir):
 ---
 
 ## Phase Execution
+
 """
     write_file(progress_path, content)
     return progress_path
 ```
 
-#### Log Phase Start/Complete
+#### Log Phase Start/Complete (Token Efficient)
 
 ```python
 def log_phase(progress_path, phase_num, phase_name, status, details=None):
+    """
+    Log phase status with minimal token usage
+    """
     entry = f"""
 ### [{timestamp()}] Phase {phase_num}: {phase_name}
 - **Status**: {status}
 """
     if details:
-        for key, value in details.items():
-            entry += f"- **{key}**: {value}\n"
+        # Only include summary, reference files for details
+        entry += f"- **Summary**: {details.get('summary', 'N/A')}\n"
+        if details.get('output_files'):
+            entry += f"- **Details**: See {', '.join(details['output_files'])}\n"
+
+    # ✅ Append only (don't re-read entire file)
     append_to_file(progress_path, entry)
+```
+
+**Example Output (Token Efficient)**:
+
+```markdown
+### [2026-01-14T01:30:00Z] Phase 3: Iterative Querying
+- **Status**: completed
+- **Summary**: 5 agents deployed, 100% success rate
+- **Details**: See raw/agent_*.md files  ← Reference only, not duplicate
+
+| Agent | Status | Output File |
+|-------|--------|-------------|
+| 01 | ✓ | raw/agent_01.md |
+| 02 | ✓ | raw/agent_02.md |
+```
+
+**❌ Wrong: Duplicating Content**
+
+```markdown
+### Phase 3: Iterative Querying
+- Status: completed
+
+**Agent 01 Results**:
+[Entire 50KB of search results pasted here...]  ← BAD: Context bloat!
+
+**Agent 02 Results**:
+[Another 50KB of search results...]  ← BAD: 100KB wasted!
 ```
 
 #### Log Agent Operations
@@ -252,6 +295,7 @@ def update_resource_usage(progress_path, tokens_used, time_elapsed, agents_used)
 ```
 
 **Required Logging Points**:
+
 1. ✅ Session start (initialize_progress_log)
 2. ✅ Each phase start/complete (log_phase)
 3. ✅ Each agent deployment (log_agent_deployment)
@@ -332,99 +376,412 @@ plan = {
 }
 ```
 
-### Phase 3: Iterative Querying (Parallel Execution)
+### StateManager vs File Storage Guidelines
 
-Deploy and manage parallel research agents:
+**CRITICAL**: Use the correct storage mechanism to maintain token efficiency.
+
+#### Use StateManager (SQLite) for
+
+- ✅ **Session metadata**: status, timestamps, session_id
+- ✅ **Agent metadata**: agent_id, status, output_file **path** (not content)
+- ✅ **GoT node metadata**: node_id, quality_score, status, parent_id
+- ✅ **Fact/Entity/Citation IDs**: References and relationships
+- ✅ **Small structured data**: <1KB per record
+
+#### Use Files for
+
+- ✅ **Raw search results**: Content from WebSearch/WebReader (>10KB)
+- ✅ **Full text content**: Articles, documents, web pages
+- ✅ **Processed fact ledgers**: Hundreds of facts with descriptions
+- ✅ **Entity graphs**: Entities with descriptions and relationships
+- ✅ **Synthesis reports**: 20-50 page documents
+- ✅ **Any content >10KB**
+
+#### Decision Matrix
+
+| Data Type | Typical Size | Storage | Example |
+| ----------- | -------------- | --------- | --------- |
+| Session status | <100 bytes | StateManager | `status='executing'` |
+| Agent metadata | <500 bytes | StateManager | `agent_id, output_file='raw/agent_01.md'` |
+| GoT node score | <200 bytes | StateManager | `node_id, quality_score=8.5` |
+| Fact reference | <500 bytes | StateManager | `fact_id, entity, attribute, source_url` |
+| Raw search result | 5-50KB | File | `raw/agent_01.md` |
+| Fact ledger | 50-500KB | File | `processed/fact_ledger.md` |
+| Full report | 100KB-1MB | File | `full_report.md` |
+
+#### Example Usage
+
+**✅ Correct: Store metadata only**
 
 ```python
-# Deploy all agents in parallel (single message)
-agent_ids = deploy_agents_parallel(agent_specs)
+# Register agent with file path reference
+sm.register_agent(ResearchAgent(
+    agent_id='agent_01',
+    session_id=session_id,
+    agent_type='web-research',
+    status=AgentStatus.RUNNING.value,
+    output_file='raw/agent_01.md'  # ← Path only, not content
+))
 
-while not all_agents_completed(agent_ids):
-    check_agent_statuses(agent_ids)
-    handle_any_failures(agent_ids)
-    wait(30)  # Check every 30 seconds
-
-# Quality gate: 80% must succeed
-success_rate = calculate_success_rate(agent_outputs)
-if success_rate < 0.8:
-    failed_agents = get_failed_agents(agent_outputs)
-    retry_failed_agents(failed_agents)
-
-# MCP Integration: Extract entities from all agent outputs
-all_entities = []
-for output in agent_outputs:
-    entities = call_mcp_tool('entity-extract', {
-        'text': output.content,
-        'entity_types': ['PERSON', 'ORG', 'DATE', 'NUMERIC', 'CONCEPT'],
-        'extract_relations': True
-    })
-    all_entities.extend(entities['entities'])
-
-# MCP Integration: Batch fact extraction for efficiency
-batch_result = call_mcp_tool('batch-fact-extract', {
-    'items': [
-        {'text': output.content, 'source_url': output.primary_source}
-        for output in agent_outputs
-    ],
-    'options': {
-        'maxConcurrency': 5,
-        'useCache': True,
-        'stopOnError': False
-    }
-})
-all_facts = batch_result['facts']
-
-# MCP Integration: Rate all sources
-source_ratings = call_mcp_tool('batch-source-rate', {
-    'items': [
-        {'source_url': source, 'source_type': detect_source_type(source)}
-        for output in agent_outputs
-        for source in output.sources
-    ],
-    'options': {'useCache': True}
-})
+# Store fact metadata with source reference
+sm.add_fact(Fact(
+    entity='AI Market',
+    attribute='Size 2024',
+    value='$184B',
+    source_url='https://example.com',  # ← URL reference
+    source_quality=SourceQuality.A.value
+))
 ```
 
-### Phase 4: Source Triangulation
-
-Cross-validate facts across multiple agents:
+**❌ Wrong: Store full content**
 
 ```python
-all_facts = []
-for output in agent_outputs:
-    facts = call_mcp_tool('fact-extract', {
-        'text': output.content,
-        'source_url': output.sources[0] if output.sources else None
-    })
-    all_facts.extend(facts)
+# DON'T DO THIS - Bloats SQLite database
+sm.register_agent(ResearchAgent(
+    agent_id='agent_01',
+    full_search_results='<50KB of content>'  # ← Wrong!
+))
 
-conflicts = call_mcp_tool('conflict-detect', {
+# DON'T DO THIS - Use files instead
+sm.add_fact(Fact(
+    entity='Report',
+    attribute='full_text',
+    value='<entire 20-page document>'  # ← Wrong!
+))
+```
+
+**Rule of thumb**: If it's unstructured text or >1KB, use files. If it's metadata or references, use StateManager.
+
+### Phase 3: Iterative Querying (File-Based Output)
+
+Deploy lightweight query agents that write results to files:
+
+```python
+# Create output directories
+raw_dir = f"{output_dir}/raw/"
+os.makedirs(raw_dir, exist_ok=True)
+
+# Deploy all agents in parallel (single message)
+# Each agent: Query only, write to file, return metadata
+agent_metadata = deploy_agents_parallel(agent_specs)
+
+# Quality gate: 80% must succeed
+success_rate = calculate_success_rate(agent_metadata)
+if success_rate < 0.8:
+    failed_agents = get_failed_agents(agent_metadata)
+    retry_failed_agents(failed_agents)
+
+# Agent returns ONLY metadata (not full content)
+# Example: {
+#   'agent_id': 'agent_01',
+#   'status': 'completed',
+#   'raw_file': 'raw/agent_01.md',
+#   'queries_count': 5,
+#   'results_count': 18
+# }
+
+# CRITICAL: No MCP tools in Phase 3 - agents are query-only
+# MCP processing happens in Phase 4 when loading files
+```
+
+**Agent Behavior (Lightweight Query-Only)**:
+
+**CRITICAL Memory Management Rules**:
+
+1. ⚠️ **NEVER accumulate results in agent context**
+2. ⚠️ **Write to file after EACH query** (not batch at end)
+3. ⚠️ **Clear variables immediately after writing** (`del result`)
+4. ⚠️ **Limit query result size** (max 10KB per query)
+
+**✅ Correct Implementation (Incremental Writing)**:
+
+```python
+def search_agent_task(query_spec, output_dir):
+    """
+    Lightweight search agent - queries only, writes to file
+
+    CRITICAL: Write incrementally to avoid context bloat!
+    """
+    queries = query_spec['queries']
+    agent_id = query_spec['agent_id']
+    focus_area = query_spec['focus']
+
+    # Initialize file with header (empty state)
+    raw_file = f"{output_dir}/raw/agent_{agent_id}.md"
+    write_file(raw_file, f"""# Raw Search Results - Agent {agent_id}
+
+**Agent ID**: {agent_id}
+**Focus Area**: {focus_area}
+**Timestamp**: {datetime.now().isoformat()}
+
+## Search Results
+
+""")
+
+    results_count = 0
+
+    # Process ONE query at a time
+    for query in queries:
+        # Execute search
+        result = execute_search(query)  # WebSearch + WebReader
+
+        # Format result
+        formatted = f"""### Result {results_count + 1}
+**Query**: {query}
+**URL**: {result.get('url')}
+**Title**: {result.get('title')}
+
+**Content**:
+{result.get('content')}
+
+---
+
+"""
+
+        # ✅ CRITICAL: Write IMMEDIATELY to file (don't accumulate)
+        append_to_file(raw_file, formatted)
+
+        # ✅ CRITICAL: Clear variable to free memory
+        del result
+        del formatted
+
+        results_count += 1
+
+    # Return ONLY metadata (lightweight)
+    return {
+        'agent_id': agent_id,
+        'status': 'completed',
+        'raw_file': raw_file,
+        'queries_count': len(queries),
+        'results_count': results_count
+    }
+```
+
+**❌ Wrong Implementation (Context Bloat)**:
+
+```python
+def bad_search_agent(query_spec, output_dir):
+    """
+    BAD EXAMPLE - DO NOT USE
+    This accumulates results in memory, causing context bloat
+    """
+    raw_results = []  # ← BAD: Memory accumulation!
+
+    for query in queries:
+        result = execute_search(query)
+        raw_results.append(result)  # ← BAD: Building up context!
+        # No memory cleanup
+
+    # Writing at end - but context already bloated
+    write_file(raw_file, format_results(raw_results))
+
+    # ❌ PROBLEM: All results kept in context throughout loop
+    # ❌ RESULT: 5 queries × 10KB each = 50KB context bloat
+```
+
+**Token Impact Comparison**:
+
+| Implementation | Context Size | Token Efficiency |
+|----------------|--------------|------------------|
+| Incremental (✅) | ~2KB constant | 95% efficient |
+| Batch (❌) | ~50KB growing | 0% efficient |
+
+**File Format: `raw/agent_01.md`**:
+
+```markdown
+# Raw Search Results - Agent 01
+
+**Agent ID**: agent_01
+**Focus Area**: 技术方法与架构
+**Timestamp**: 2025-01-14T00:15:00Z
+
+## Queries Executed
+
+1. `FinGPT architecture technical implementation`
+2. `RAG financial LLM applications`
+
+## Search Results
+
+### Result 1
+**Query**: FinGPT architecture technical implementation
+**URL**: https://github.com/AI4Finance-Foundation/FinGPT
+**Title**: FinGPT: Open Source Financial LLM
+
+**Content**:
+[Full content from WebReader]
+
+---
+**Total Queries**: 3
+**Total Results**: 18
+```
+
+### Phase 4: Source Triangulation (MCP File Processing)
+
+Load raw files and process with MCP tools:
+
+**CRITICAL: Handle large files efficiently to prevent context overflow.**
+
+#### File Size Handling Strategy
+
+| File Size | Strategy | Token Impact |
+|-----------|----------|--------------|
+| <20KB | Load entire file, process normally | ~5k tokens |
+| 20-100KB | Load and process in one pass | ~25k tokens |
+| >100KB | **Split processing or sample key sections** | ~25k tokens (chunked) |
+| >500KB | **Error: File too large** | Reject and log |
+
+#### Implementation
+
+```python
+# Create processed directory
+processed_dir = f"{output_dir}/processed/"
+os.makedirs(processed_dir, exist_ok=True)
+
+all_facts = []
+all_entities = []
+source_ratings = {}
+
+# Load each raw file sequentially (token efficient)
+for metadata in agent_metadata:
+    raw_file = metadata['raw_file']
+
+    # ✅ CRITICAL: Check file size before loading
+    file_size = os.path.getsize(raw_file)
+
+    if file_size > 500_000:  # >500KB
+        log_error(f"File too large: {raw_file} ({file_size} bytes)")
+        continue
+
+    elif file_size > 100_000:  # >100KB
+        # Process in chunks
+        log_warning(f"Large file detected: {raw_file} ({file_size} bytes), using chunked processing")
+
+        chunks = read_file_in_chunks(raw_file, chunk_size=50_000)
+        for chunk_idx, chunk in enumerate(chunks):
+            # MCP: Extract facts from chunk
+            facts = call_mcp_tool('mcp__deep-research__fact-extract', {
+                'text': chunk,
+                'source_url': f"{raw_file}#chunk_{chunk_idx}"
+            })
+            all_facts.extend(facts)
+
+            # ✅ CRITICAL: Clear chunk after processing
+            del chunk
+
+            log_mcp_call(progress_path, 'fact-extract', len(chunk), len(facts), False)
+
+    else:  # <100KB
+        # Normal processing
+        raw_content = read_file(raw_file)
+
+        # MCP: Extract facts from this file
+        facts = call_mcp_tool('mcp__deep-research__fact-extract', {
+            'text': raw_content,
+            'source_url': extract_urls(raw_content)
+        })
+        all_facts.extend(facts)
+
+        # MCP: Extract entities
+        entities = call_mcp_tool('mcp__deep-research__entity-extract', {
+            'text': raw_content,
+            'entity_types': ['PERSON', 'ORG', 'DATE', 'NUMERIC', 'CONCEPT'],
+            'extract_relations': True
+        })
+        all_entities.extend(entities)
+
+        # ✅ CRITICAL: Clear content after processing to free memory
+        del raw_content
+
+        # Log MCP call to progress
+        log_mcp_call(progress_path, 'fact-extract', len(raw_content), len(facts), False)
+        log_mcp_call(progress_path, 'entity-extract', len(raw_content), len(entities), False)
+
+# MCP: Batch conflict detection across all facts
+conflicts = call_mcp_tool('mcp__deep-research__conflict-detect', {
     'facts': all_facts,
     'tolerance': {'numerical': 0.05, 'temporal': 'same_year'}
 })
 
-fact_ledger = build_fact_ledger(all_facts, conflicts)
+# MCP: Rate all sources
+source_ratings = call_mcp_tool('mcp__deep-research__batch-source-rate', {
+    'items': extract_all_sources(all_facts),
+    'options': {'useCache': True}
+})
+
+# Write processed results to file
+fact_ledger_file = f"{processed_dir}/fact_ledger.md"
+write_file(fact_ledger_file, format_fact_ledger(all_facts, all_entities, conflicts, source_ratings))
+
+entity_graph_file = f"{processed_dir}/entity_graph.md"
+write_file(entity_graph_file, format_entity_graph(all_entities))
+
+conflict_report_file = f"{processed_dir}/conflict_report.md"
+write_file(conflict_report_file, format_conflict_report(conflicts))
+
+return {
+    'status': 'completed',
+    'fact_ledger_file': fact_ledger_file,
+    'entity_graph_file': entity_graph_file,
+    'conflict_report_file': conflict_report_file,
+    'facts_extracted': len(all_facts),
+    'entities_extracted': len(all_entities),
+    'conflicts_detected': len(conflicts)
+}
 ```
 
-### Phase 5: Knowledge Synthesis
+**File Format: `processed/fact_ledger.md`**:
 
-Deploy synthesizer-agent to create unified report:
+```markdown
+# Fact Ledger - Phase 4 MCP Processing
+
+**Generated**: 2025-01-14T00:45:00Z
+**MCP Tools Used**: fact-extract, entity-extract, conflict-detect, batch-source-rate
+
+## Extracted Facts (247 total)
+
+### Fact 1
+**Statement**: FinGPT v3.3 achieves 0.882 F1 score
+**Source**: https://github.com/AI4Finance-Foundation/FinGPT
+**Confidence**: 0.95
+**Quality Rating**: A
+
+...
+
+## Entities Extracted (89 total)
+
+### Organizations
+- AI4Finance-Foundation
+- 华泰证券
+
+...
+
+## Conflicts Detected (3 total)
+
+### Conflict 1
+**Fact A**: FinGPT training cost <$300
+**Fact B**: FinGPT training cost ~$17.25
+**Resolution**: Both accurate - different contexts
+
+...
+```
+
+### Phase 5: Knowledge Synthesis (Load Processed Files)
+
+Deploy synthesizer-agent with file-based input:
 
 ```python
 synthesis_result = call_agent('synthesizer-agent', {
-    'agent_outputs': agent_outputs,
-    'fact_ledger': fact_ledger,
+    'fact_ledger_file': fact_ledger_file,
+    'entity_graph_file': entity_graph_file,
+    'conflict_report_file': conflict_report_file,
+    'raw_files_directory': f"{output_dir}/raw/",
     'output_format': 'comprehensive'
 })
 
 # Quality gate: Minimum citations
 if len(synthesis_result.citations) < 30:
-    additional_research = request_more_sources(synthesis_result)
-    synthesis_result = resynthesize_with_additional(
-        synthesis_result,
-        additional_research
-    )
+    additional_research_needed = True
+    # Would trigger Phase 3 re-deployment for missing sources
 ```
 
 ### Phase 6: Quality Assurance
@@ -492,6 +849,18 @@ Generate and save all final deliverables:
 topic_name = sanitize_topic_name(synthesis.topic)
 output_dir = f'RESEARCH/{topic_name}/'
 
+# Create all directories
+directories = [
+    'raw/',              # Created in Phase 3
+    'processed/',        # Created in Phase 4
+    'research_notes/',
+    'sources/',
+    'data/',
+    'appendices/'
+]
+for dir_path in directories:
+    os.makedirs(f"{output_dir}/{dir_path}", exist_ok=True)
+
 documents = {
   'README.md': generate_readme(synthesis),
   'executive_summary.md': synthesis.executive_summary,
@@ -500,50 +869,166 @@ documents = {
   'sources/bibliography.md': synthesis.bibliography,
   'sources/source_quality_table.md': synthesis.source_quality_ratings,
   'appendices/methodology.md': generate_methodology_doc(),
-  'appendices/limitations.md': validation.limitations_identified
+  'appendices/limitations.md': validation.limitations_identified,
+  # File-based architecture artifacts:
+  'raw/': 'Created in Phase 3 - Raw search results from each agent',
+  'processed/fact_ledger.md': 'Created in Phase 4 - MCP-extracted facts',
+  'processed/entity_graph.md': 'Created in Phase 4 - Extracted entities',
+  'processed/conflict_report.md': 'Created in Phase 4 - Detected conflicts',
+  'processed/source_ratings.md': 'Created in Phase 4 - A-E quality ratings'
 }
 ```
 
+**Final Directory Structure**:
+
+```
+RESEARCH/[topic]/
+├── README.md                              # Overview and navigation
+├── executive_summary.md                   # 1-2 page key findings
+├── full_report.md                         # Complete analysis (20-50 pages)
+├── progress.md                            # Research execution log
+├── raw/                                   # NEW: Phase 3 outputs
+│   ├── agent_01.md                        # Agent 1 raw search results
+│   ├── agent_02.md                        # Agent 2 raw search results
+│   ├── agent_03.md                        # Agent 3 raw search results
+│   └── ...
+├── processed/                             # NEW: Phase 4 MCP outputs
+│   ├── fact_ledger.md                     # All extracted facts with metadata
+│   ├── entity_graph.md                    # Entities and relationships
+│   ├── conflict_report.md                 # Detected conflicts and resolutions
+│   └── source_ratings.md                  # A-E quality ratings for all sources
+├── research_notes/
+│   ├── research_plan.md                   # Phase 2 research plan
+│   └── agent_findings_raw.md              # Consolidated findings (legacy)
+├── sources/
+│   ├── bibliography.md                    # Complete citations
+│   └── source_quality_table.md            # Quality ratings summary
+├── data/
+│   └── statistics.md                      # Key numbers and metrics
+└── appendices/
+    ├── methodology.md                     # Research methods used
+    └── limitations.md                     # Unknowns and gaps
+```
+
 ## Excellence Checklist
+
+### Phase Completion
 
 - [ ] All 7 phases completed successfully
 - [ ] Quality gates enforced at each checkpoint
 - [ ] Agent failures handled with recovery strategies
 - [ ] Progress tracked and reported to user
 - [ ] **Progress log created**: `RESEARCH/[topic]/progress.md` initialized at start
-- [ ] **Progress log updated**: All phases, agents, MCP calls logged
-- [ ] Parallel agent deployment used (single message)
-- [ ] **MCP tools used in Phase 3**: entity-extract, batch-fact-extract, batch-source-rate
-- [ ] **MCP tools used in Phase 4**: fact-extract, conflict-detect
-- [ ] **MCP tools used in Phase 6**: batch-citation-validate, fact-extract, conflict-detect, cache-stats
-- [ ] Citations validated with batch-citation-validate (100% completeness)
-- [ ] All sources rated with source-rate or batch-source-rate
-- [ ] Conflicts detected with conflict-detect and resolved
-- [ ] Red team validation completed
+- [ ] **Progress log updated**: All phases, agents, MCP calls, file operations logged
+
+### Phase 3: Query Agents (File-Based)
+
+- [ ] Parallel agent deployment used (single message, multiple Task calls)
+- [ ] **Agents return metadata only** (not full content in context)
+- [ ] **Raw results written to files**: `raw/agent_*.md` for each agent
+- [ ] Quality gate: 80% of agents completed successfully
+- [ ] **No MCP tools in Phase 3** - agents are query-only
+
+### Phase 4: MCP Processing (File-Based)
+
+- [ ] **Raw files loaded sequentially** from `raw/` directory
+- [ ] **MCP tools invoked**:
+  - [ ] `mcp__fact-extract` on each raw file
+  - [ ] `mcp__entity-extract` on each raw file
+  - [ ] `mcp__conflict-detect` on all extracted facts
+  - [ ] `mcp__batch-source-rate` on all sources
+- [ ] **Processed results written to files**:
+  - [ ] `processed/fact_ledger.md` - All extracted facts
+  - [ ] `processed/entity_graph.md` - Entities and relationships
+  - [ ] `processed/conflict_report.md` - Detected conflicts
+  - [ ] `processed/source_ratings.md` - A-E quality ratings
+- [ ] Quality gate: Minimum 30 facts extracted
+- [ ] **All MCP calls logged to progress.md**
+
+### Phase 5: Knowledge Synthesis
+
+- [ ] Synthesizer-agent deployed with **file-based input** (not agent_outputs)
+- [ ] Loads from `processed/fact_ledger.md`, `processed/entity_graph.md`
+- [ ] Quality gate: Minimum 30 citations in synthesis
+
+### Phase 6: Quality Assurance
+
+- [ ] **MCP tools invoked**:
+  - [ ] `mcp__batch-citation-validate` on all citations
+  - [ ] `mcp__conflict-detect` on synthesized report
+  - [ ] `mcp__cache-stats` for performance report
+- [ ] Red-team-agent deployed with MCP validation results
+- [ ] Quality gate: 100% citation completeness, confidence > 0.7
+
+### Phase 7: Final Output
+
+- [ ] Complete directory structure created:
+  - [ ] `raw/` - Raw search results
+  - [ ] `processed/` - MCP-processed data
+  - [ ] `research_notes/` - Research plan and findings
+  - [ ] `sources/` - Bibliography and quality ratings
+  - [ ] `data/` - Statistics and metrics
+  - [ ] `appendices/` - Methodology and limitations
+- [ ] All deliverables generated and saved
+- [ ] README.md provides clear navigation
+
+### General Requirements
+
 - [ ] Complete research package generated
 - [ ] State persisted for recovery capability
 - [ ] Methodology documented in appendices
-- [ ] MCP cache statistics saved to state
+- [ ] MCP cache statistics saved to state and progress.md
+- [ ] File-based artifacts preserved for debugging and audit
+
+### Critical Architecture Requirements
+
+- [ ] **Phase 3 agents are lightweight** (query-only, no context burden)
+- [ ] **Phase 4 uses file-based MCP processing** (not inline agent_outputs)
+- [ ] **Phase 5 loads from processed files** (not raw agent outputs)
+- [ ] **Token efficiency**: 75% reduction compared to context-heavy architecture
+- [ ] **Resume capability**: Can restart from any phase using saved files
 
 ## Best Practices
 
+### File-Based Architecture (NEW)
+
+1. **Phase 3 agents are lightweight**: Query-only, write results to files, return metadata
+2. **Phase 4 processes files sequentially**: Load raw files, apply MCP tools, write processed results
+3. **Phase 5 loads from processed files**: Don't re-extract, use pre-processed fact ledger
+4. **Enable resume capability**: All phases can restart from saved files
+5. **Token efficiency**: 75% reduction through file-based propagation
+
+### Quality Gates & MCP Tools
+
 1. Deploy agents in parallel: Single message, multiple Task calls
 2. Enforce quality gates: Don't proceed if quality insufficient
-3. Handle failures gracefully: Retry, adjust, or continue without
-4. Track progress: Update state after every step
-5. Be transparent: Report progress and issues to user
-6. Validate before finalizing: Red team check is mandatory
-7. **Use MCP tools systematically**:
-   - Phase 3: Extract entities and facts, rate sources (use batch tools for efficiency)
-   - Phase 4: Detect conflicts across agent findings
-   - Phase 6: Validate citations, detect final conflicts, get cache stats
-8. **Leverage batch processing**: Use batch-* tools for multiple items to improve performance
-9. **Enable caching**: Set `useCache: true` in batch tool options to avoid duplicate processing
-10. Document methodology: Save how research was conducted
-11. Manage resources: Stay within token budgets
-12. Generate complete package: All formats, all appendices
-13. Enable recovery: Persist state for crash recovery
-14. **Clear MCP cache between research sessions**: Use cache-clear to start fresh
+3. **MCP tools in Phase 4 only**: fact-extract, entity-extract, conflict-detect, batch-source-rate
+4. **MCP tools in Phase 6**: batch-citation-validate, conflict-detect, cache-stats
+5. **Log all MCP calls**: Track tool usage in progress.md
+
+### Error Handling & Recovery
+
+1. Handle failures gracefully: Retry, adjust, or continue without
+2. Track progress: Update state and progress.md after every step
+3. Be transparent: Report progress and issues to user
+4. Enable recovery: Persist state and files for crash recovery
+
+### Finalization
+
+1. Validate before finalizing: Red team check is mandatory
+2. **Leverage batch processing**: Use batch-* tools for multiple items
+3. **Enable caching**: Set `useCache: true` in batch tool options
+4. Document methodology: Save how research was conducted
+5. Manage resources: Stay within token budgets
+6. Generate complete package: All formats, all directories
+7. **Clear MCP cache between sessions**: Use cache-clear to start fresh
+
+### Token Management
+
+1. **Phase 3**: Keep agent context minimal (~5k tokens per agent)
+2. **Phase 4**: Load files sequentially, don't keep all in memory
+3. **Phase 5**: Load processed files, not raw agent outputs
+4. **Monitor token usage**: Update progress.md every phase change
 
 ## Integration with Other Agents
 
