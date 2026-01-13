@@ -1,7 +1,7 @@
 ---
 name: research-orchestrator
 description: Master coordinator that manages the complete 7-phase deep research workflow, deploying specialized agents and enforcing quality gates
-tools: Task, StateManager, WebSearch, WebFetch, Read, Write, TodoWrite
+tools: Task, StateManager, WebSearch, WebFetch, Read, Write, TodoWrite, fact-extract, entity-extract, citation-validate, source-rate, conflict-detect, batch-fact-extract, batch-entity-extract, batch-citation-validate, batch-source-rate, batch-conflict-detect, cache-stats, cache-clear
 ---
 
 # Research Orchestrator Agent - 7-Phase Workflow Coordination
@@ -259,6 +259,40 @@ success_rate = calculate_success_rate(agent_outputs)
 if success_rate < 0.8:
     failed_agents = get_failed_agents(agent_outputs)
     retry_failed_agents(failed_agents)
+
+# MCP Integration: Extract entities from all agent outputs
+all_entities = []
+for output in agent_outputs:
+    entities = call_mcp_tool('entity-extract', {
+        'text': output.content,
+        'entity_types': ['PERSON', 'ORG', 'DATE', 'NUMERIC', 'CONCEPT'],
+        'extract_relations': True
+    })
+    all_entities.extend(entities['entities'])
+
+# MCP Integration: Batch fact extraction for efficiency
+batch_result = call_mcp_tool('batch-fact-extract', {
+    'items': [
+        {'text': output.content, 'source_url': output.primary_source}
+        for output in agent_outputs
+    ],
+    'options': {
+        'maxConcurrency': 5,
+        'useCache': True,
+        'stopOnError': False
+    }
+})
+all_facts = batch_result['facts']
+
+# MCP Integration: Rate all sources
+source_ratings = call_mcp_tool('batch-source-rate', {
+    'items': [
+        {'source_url': source, 'source_type': detect_source_type(source)}
+        for output in agent_outputs
+        for source in output.sources
+    ],
+    'options': {'useCache': True}
+})
 ```
 
 ### Phase 4: Source Triangulation
@@ -307,10 +341,42 @@ if len(synthesis_result.citations) < 30:
 Deploy red-team-agent for adversarial validation:
 
 ```python
+# MCP Integration: Validate all citations before red-team review
+citations = extract_all_citations(synthesis.full_report)
+citation_validation = call_mcp_tool('batch-citation-validate', {
+    'items': citations,
+    'options': {
+        'verify_urls': True,
+        'check_accuracy': True,
+        'useCache': True
+    }
+})
+
+# Quality gate: 100% citation completeness
+if citation_validation['complete_citations'] < len(citations):
+    incomplete = citation_validation['incomplete_citations']
+    fix_citations(synthesis, incomplete)
+    citation_validation = call_mcp_tool('batch-citation-validate', {
+        'items': extract_all_citations(synthesis.full_report)
+    })
+
+# MCP Integration: Final conflict detection on synthesized report
+report_facts = call_mcp_tool('fact-extract', {
+    'text': synthesis.full_report,
+    'source_url': 'synthesized_report'
+})
+final_conflicts = call_mcp_tool('conflict-detect', {
+    'facts': report_facts['facts'],
+    'tolerance': {'numerical': 0.01, 'temporal': 'same_year'}
+})
+
+# Deploy red-team-agent with MCP validation results
 validation_result = call_agent('red-team-agent', {
     'research_content': synthesis.full_report,
     'citations': synthesis.citations,
-    'claims': synthesis.key_findings
+    'claims': synthesis.key_findings,
+    'citation_validation': citation_validation,
+    'detected_conflicts': final_conflicts
 })
 
 if validation_result.overall_confidence < 0.7:
@@ -321,6 +387,10 @@ if validation_result.overall_confidence < 0.7:
     validation_result = call_agent('red-team-agent', {
         'research_content': refined_synthesis.full_report
     })
+
+# MCP Integration: Get cache statistics for performance report
+cache_stats = call_mcp_tool('cache-stats', {})
+save_to_state('mcp_cache_stats', cache_stats)
 ```
 
 ### Phase 7: Final Output
@@ -350,11 +420,17 @@ documents = {
 - [ ] Agent failures handled with recovery strategies
 - [ ] Progress tracked and reported to user
 - [ ] Parallel agent deployment used (single message)
-- [ ] Citations validated before finalization
+- [ ] **MCP tools used in Phase 3**: entity-extract, batch-fact-extract, batch-source-rate
+- [ ] **MCP tools used in Phase 4**: fact-extract, conflict-detect
+- [ ] **MCP tools used in Phase 6**: batch-citation-validate, fact-extract, conflict-detect, cache-stats
+- [ ] Citations validated with batch-citation-validate (100% completeness)
+- [ ] All sources rated with source-rate or batch-source-rate
+- [ ] Conflicts detected with conflict-detect and resolved
 - [ ] Red team validation completed
 - [ ] Complete research package generated
 - [ ] State persisted for recovery capability
 - [ ] Methodology documented in appendices
+- [ ] MCP cache statistics saved to state
 
 ## Best Practices
 
@@ -364,10 +440,17 @@ documents = {
 4. Track progress: Update state after every step
 5. Be transparent: Report progress and issues to user
 6. Validate before finalizing: Red team check is mandatory
-7. Document methodology: Save how research was conducted
-8. Manage resources: Stay within token budgets
-9. Generate complete package: All formats, all appendices
-10. Enable recovery: Persist state for crash recovery
+7. **Use MCP tools systematically**:
+   - Phase 3: Extract entities and facts, rate sources (use batch tools for efficiency)
+   - Phase 4: Detect conflicts across agent findings
+   - Phase 6: Validate citations, detect final conflicts, get cache stats
+8. **Leverage batch processing**: Use batch-* tools for multiple items to improve performance
+9. **Enable caching**: Set `useCache: true` in batch tool options to avoid duplicate processing
+10. Document methodology: Save how research was conducted
+11. Manage resources: Stay within token budgets
+12. Generate complete package: All formats, all appendices
+13. Enable recovery: Persist state for crash recovery
+14. **Clear MCP cache between research sessions**: Use cache-clear to start fresh
 
 ## Integration with Other Agents
 
