@@ -148,7 +148,7 @@ class ResearchSession:
 
 @dataclass
 class GoTNode:
-    """Graph of Thoughts node"""
+    """Graph of Thoughts node with token optimization"""
     node_id: str
     session_id: str
     content: str
@@ -157,6 +157,8 @@ class GoTNode:
     quality_score: Optional[float] = None
     depth: int = 0
     status: str = NodeStatus.ACTIVE.value
+    summary: Optional[str] = None  # Compressed version for token efficiency
+    compression_ratio: float = 0.1  # Target 10:1 compression (10% of original)
     metadata: Optional[Dict[str, Any]] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
@@ -525,13 +527,13 @@ class StateManager:
     # ========================================================================
 
     def create_got_node(self, node: GoTNode) -> GoTNode:
-        """Create a GoT node."""
+        """Create a GoT node with optional summary for token optimization."""
         with self._transaction() as conn:
             conn.execute("""
                 INSERT INTO got_nodes
                 (node_id, session_id, parent_id, node_type, content,
-                 quality_score, depth, status, metadata)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 quality_score, depth, status, summary, compression_ratio, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 node.node_id,
                 node.session_id,
@@ -541,6 +543,8 @@ class StateManager:
                 node.quality_score,
                 node.depth,
                 node.status,
+                node.summary,
+                node.compression_ratio,
                 json.dumps(node.metadata) if node.metadata else None
             ))
 

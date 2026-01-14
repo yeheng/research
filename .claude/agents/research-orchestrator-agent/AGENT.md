@@ -151,6 +151,102 @@ def handle_agent_failure(agent_id, failure_reason):
         adjust_synthesis_strategy(exclude_agent=agent_id)
 ```
 
+#### Checkpoint Recovery (NEW)
+
+**Automatic session resumption after interruptions**
+
+The orchestrator now supports checkpoint-based recovery at any phase:
+
+##### Recovery Features
+
+| Feature | Description | Implementation |
+|---------|-------------|----------------|
+| **Agent Checkpoints** | Save state after each agent completes | `sm.update_agent_status()` after completion |
+| **Phase Detection** | Auto-detect current phase from DB | Check agents, files, status in StateManager |
+| **Partial Recovery** | Resume only pending agents | Filter completed agents before deployment |
+| **File Validation** | Verify outputs exist and valid | Check file paths and sizes |
+
+##### Resume Command
+
+```bash
+# Resume any interrupted session
+python3 scripts/resume_research.py --session research-20240115-001
+
+# Output:
+# ============================================================
+# Resuming Research Session
+# ============================================================
+# Session ID: research-20240115-001
+# Topic: AI Market Analysis
+# Status: executing
+# Current Phase: 3
+# ============================================================
+#
+# ⚠️ Resuming Phase 3: 3/5 agents already completed
+#    Deploying 2 remaining agents: ['agent_04', 'agent_05']
+```
+
+##### Recovery Scenarios
+
+**1. Partial Agent Completion (Most Common)**
+
+```python
+# Before interruption:
+# - agent_01: completed ✓
+# - agent_02: completed ✓
+# - agent_03: completed ✓
+# - agent_04: failed/interrupted ✗
+# - agent_05: not started ✗
+
+# After resume:
+completed_agents = sm.get_session_agents(session_id, status='completed')  # 3 agents
+pending_specs = filter_pending(agent_specs, completed_agents)  # 2 agents
+new_results = deploy_agents_parallel(pending_specs)  # Deploy only 2
+all_results = merge(completed_agents, new_results)  # Total 5 agents
+```
+
+**2. Phase 4 Interruption**
+
+```python
+# State: All 5 agents completed, MCP processing incomplete
+# Detection: agents.all_completed() but fact_ledger.md missing
+
+# Action: Skip Phase 3, resume from Phase 4
+load_agent_outputs_from_files()  # Load 5 raw/*.md files
+process_with_mcp_tools()  # Extract facts, entities, conflicts
+save_fact_ledger()  # Create fact_ledger.md
+```
+
+**3. Session Failure Recovery**
+
+```python
+# State: Session status = 'failed' (unexpected error)
+# Detection: Check last successful phase
+
+# Action: Retry from last checkpoint
+if last_phase == 3:
+    resume_from_phase_3()  # Continue agent deployment
+elif last_phase == 4:
+    resume_from_phase_4()  # Retry MCP processing
+```
+
+##### Implementation Example
+
+See **Phase 3: Iterative Querying with Recovery** (Line 455) for complete implementation of `execute_phase_3_with_recovery()`.
+
+##### CLI Options
+
+```bash
+# Show session status only
+python3 scripts/resume_research.py --session ID --status
+
+# Validate session files
+python3 scripts/resume_research.py --session ID --validate
+
+# Resume execution
+python3 scripts/resume_research.py --session ID
+```
+
 ### 5. Progress Tracking & Reporting
 
 Monitor and report research progress:
@@ -452,24 +548,106 @@ sm.add_fact(Fact(
 
 **Rule of thumb**: If it's unstructured text or >1KB, use files. If it's metadata or references, use StateManager.
 
-### Phase 3: Iterative Querying (File-Based Output)
+### Phase 3: Iterative Querying (File-Based Output with Recovery)
 
-Deploy lightweight query agents that write results to files:
+Deploy lightweight query agents that write results to files with automatic checkpoint recovery:
+
+#### Recovery-Aware Deployment
+
+**CRITICAL: Check for completed agents before deploying**
 
 ```python
-# Create output directories
-raw_dir = f"{output_dir}/raw/"
-os.makedirs(raw_dir, exist_ok=True)
+def execute_phase_3_with_recovery(session_id, agent_specs, output_dir):
+    """
+    Deploy agents with automatic checkpoint recovery
 
-# Deploy all agents in parallel (single message)
-# Each agent: Query only, write to file, return metadata
-agent_metadata = deploy_agents_parallel(agent_specs)
+    Enables resumption after failures or interruptions
+    """
+    # Step 1: Check for already-completed agents
+    completed_agents = sm.get_session_agents(
+        session_id,
+        status=AgentStatus.COMPLETED.value
+    )
+    completed_ids = {a.agent_id for a in completed_agents}
 
-# Quality gate: 80% must succeed
-success_rate = calculate_success_rate(agent_metadata)
-if success_rate < 0.8:
-    failed_agents = get_failed_agents(agent_metadata)
-    retry_failed_agents(failed_agents)
+    # Step 2: Filter to pending agents only
+    pending_specs = [
+        spec for spec in agent_specs
+        if spec['agent_id'] not in completed_ids
+    ]
+
+    # Step 3: Resume scenario - all agents completed
+    if not pending_specs:
+        log_info("✓ All agents already completed, resuming from Phase 4")
+        return [
+            {
+                'agent_id': a.agent_id,
+                'raw_file': a.output_file,
+                'status': 'completed'
+            }
+            for a in completed_agents
+        ]
+
+    # Step 4: Partial completion - resume remaining agents
+    if completed_ids:
+        log_info(f"⚠️ Resuming Phase 3: {len(completed_ids)}/{len(agent_specs)} agents already completed")
+        log_info(f"   Deploying {len(pending_specs)} remaining agents: {[s['agent_id'] for s in pending_specs]}")
+
+    # Create output directories
+    raw_dir = f"{output_dir}/raw/"
+    os.makedirs(raw_dir, exist_ok=True)
+
+    # Step 5: Deploy only pending agents (in parallel)
+    new_results = deploy_agents_parallel(pending_specs, session_id)
+
+    # Step 6: Merge with completed agents
+    all_results = [
+        {
+            'agent_id': a.agent_id,
+            'raw_file': a.output_file,
+            'status': 'completed'
+        }
+        for a in completed_agents
+    ] + new_results
+
+    # Quality gate: 80% must succeed
+    success_rate = len([r for r in all_results if r['status'] == 'completed']) / len(all_results)
+    if success_rate < 0.8:
+        log_error(f"⚠️ Only {success_rate:.0%} agents succeeded (need 80%)")
+        failed_agents = [r for r in all_results if r['status'] != 'completed']
+        retry_failed_agents(failed_agents, session_id)
+
+    return all_results
+
+# CRITICAL: No MCP tools in Phase 3 - agents are query-only
+# MCP processing happens in Phase 4 when loading files
+```
+
+#### Checkpoint Save After Each Agent
+
+**Automatic checkpoint on agent completion:**
+
+```python
+def on_agent_complete(agent_id: str, result: Dict, session_id: str):
+    """
+    Save checkpoint immediately after agent completes
+
+    Enables recovery from any point in Phase 3
+    """
+    # Update agent status
+    sm.update_agent_status(
+        agent_id,
+        AgentStatus.COMPLETED.value
+    )
+
+    # Save output file path
+    sm.update_agent(
+        agent_id,
+        output_file=result['raw_file'],
+        token_usage=result.get('tokens', 0)
+    )
+
+    log_info(f"✓ Checkpoint saved: {agent_id} → {result['raw_file']}")
 
 # Agent returns ONLY metadata (not full content)
 # Example: {
@@ -479,9 +657,6 @@ if success_rate < 0.8:
 #   'queries_count': 5,
 #   'results_count': 18
 # }
-
-# CRITICAL: No MCP tools in Phase 3 - agents are query-only
-# MCP processing happens in Phase 4 when loading files
 ```
 
 **Agent Behavior (Lightweight Query-Only)**:

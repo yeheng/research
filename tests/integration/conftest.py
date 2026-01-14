@@ -134,11 +134,13 @@ def sample_got_node() -> Dict[str, Any]:
 
 @pytest.fixture
 def mcp_client(test_config: Dict[str, Any]):
-    """Provide an MCP client for testing."""
+    """Provide an MCP client for testing (v2.0 with persistent connection)."""
     try:
         from scripts.mcp_client import MCPClient
-        client = MCPClient(server_url=test_config["mcp_server_url"])
+        # MCPClient v2 uses persistent connection, no server_url needed
+        client = MCPClient()
         yield client
+        client.close()  # Clean up persistent connection
     except ImportError:
         # Mock client if real one not available
         mock_client = Mock()

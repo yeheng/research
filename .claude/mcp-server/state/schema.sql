@@ -21,12 +21,15 @@ CREATE TABLE IF NOT EXISTS research_sessions (
 
 -- Graph of Thoughts Nodes
 -- Stores nodes in the GoT graph for research path optimization
+-- Token optimization: Added summary and compression_ratio fields for efficient storage
 CREATE TABLE IF NOT EXISTS got_nodes (
     node_id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
     parent_id TEXT,
     node_type TEXT CHECK(node_type IN ('root', 'branch', 'leaf')) DEFAULT 'branch',
     content TEXT NOT NULL,
+    summary TEXT,  -- Compressed version (10:1 ratio) for token efficiency
+    compression_ratio REAL DEFAULT 0.1 CHECK(compression_ratio > 0 AND compression_ratio <= 1),
     quality_score REAL CHECK(quality_score >= 0 AND quality_score <= 10),
     depth INTEGER DEFAULT 0,
     status TEXT CHECK(status IN ('active', 'pruned', 'aggregated', 'refined')) DEFAULT 'active',
