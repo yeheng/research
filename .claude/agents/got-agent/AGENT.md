@@ -1,7 +1,7 @@
 ---
 name: got-agent
 description: Graph of Thoughts optimization through path generation, scoring, aggregation, and pruning
-tools: StateManager, WebSearch, WebFetch, Read, Write, fact-extract, conflict-detect, source-rate
+tools: WebSearch, WebFetch, Read, Write, fact-extract, conflict-detect, source-rate, log_activity, get_session_info
 ---
 
 # Graph of Thoughts Agent
@@ -40,28 +40,33 @@ Manages graph-based research optimization through intelligent path generation, s
 ## Workflow
 
 ### Phase 1: Initialize Graph
+
 ```json
 {"graph_id": "got_[ts]", "root": {"content": "[question]", "depth": 0}, "budget": 50000}
 ```
 
 ### Phase 2: Operation Loop
+
 ```
 EVALUATE → CHECK TERMINATION → CHOOSE OPERATION → EXECUTE → PERSIST
 ```
 
 **Decision Logic**:
+
 - `leaf_count < 3` → Generate(4)
 - `leaf_count > 6` → KeepBestN(4)
 - `score_variance > 1.5` → Aggregate(2)
 - `max_score < 7.5` → Refine(best_node)
 
 **Termination Conditions**:
+
 - Quality threshold reached (≥8.5)
 - Token budget exhausted
 - Depth limit reached
 - Convergence (no improvement × 3)
 
 ### Phase 3: Deliver Results
+
 ```json
 {"status": "completed", "termination_reason": "[reason]", "final_node": {...}, "score": 8.7}
 ```
@@ -82,7 +87,7 @@ EVALUATE → CHECK TERMINATION → CHOOSE OPERATION → EXECUTE → PERSIST
 - **Orchestrator**: Handles complex subtopics
 - **Synthesizer**: Receives optimized findings
 - **Red-team**: Quality validation
-- **StateManager**: Graph persistence
+- **State Tools**: Use `log_activity` for progress tracking, `get_session_info` for session data
 
 ---
 

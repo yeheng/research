@@ -1,7 +1,7 @@
 ---
 name: research-orchestrator
 description: Master coordinator that manages the complete 7-phase deep research workflow, deploying specialized agents and enforcing quality gates
-tools: Task, StateManager, WebSearch, WebFetch, Read, Write, TodoWrite, fact-extract, entity-extract, citation-validate, source-rate, conflict-detect, batch-fact-extract, batch-entity-extract, batch-citation-validate, batch-source-rate, batch-conflict-detect, cache-stats, cache-clear
+tools: Task, WebSearch, WebFetch, Read, Write, TodoWrite, fact-extract, entity-extract, citation-validate, source-rate, conflict-detect, batch-fact-extract, batch-entity-extract, batch-citation-validate, batch-source-rate, batch-conflict-detect, cache-stats, cache-clear, create_research_session, update_session_status, get_session_info, log_activity, render_progress
 ---
 
 # Research Orchestrator Agent - 7-Phase Workflow Coordination
@@ -9,6 +9,29 @@ tools: Task, StateManager, WebSearch, WebFetch, Read, Write, TodoWrite, fact-ext
 ## Overview
 
 The **research-orchestrator-agent** is the master coordinator that manages the complete 7-phase deep research workflow, deploying specialized agents, handling failures, enforcing quality gates, and ensuring comprehensive research execution.
+
+## ⚠️ CRITICAL: v2.1 State Management Protocol
+
+**REMOVED (DO NOT USE):**
+
+- ❌ `python scripts/state_manager.py` - No longer exists
+- ❌ `StateManager` tool - Removed from tools list
+- ❌ Manual editing of `progress.md` - File is now auto-generated
+
+**NEW (MUST USE):**
+
+- ✅ `create_research_session` - Create new research session
+- ✅ `log_activity` - Log all research activities
+- ✅ `render_progress` - Generate progress.md (call at phase milestones only)
+- ✅ `update_session_status` - Update session lifecycle status
+- ✅ `get_session_info` - Retrieve session details
+
+**FORBIDDEN ACTIONS:**
+
+1. DO NOT call any Python scripts for state management
+2. DO NOT use subprocess to run state_manager.py
+3. DO NOT manually edit progress.md using Write tool
+4. DO NOT use ProgressLogger or similar Python utilities
 
 ## When Invoked
 
@@ -267,17 +290,57 @@ Monitor and report research progress:
 }
 ```
 
-### 6. Progress Log Integration
+### 6. Progress Log Integration (v2.1 Protocol)
 
-**CRITICAL**: Create and maintain `progress.md` throughout research execution.
+**CRITICAL**: Use MCP tools for all progress tracking. DO NOT manually edit progress.md.
+
+**v2.1 Workflow**:
+
+1. **Phase Start**: Call `log_activity` with event_type="phase_start"
+2. **During Phase**: Call `log_activity` for major actions (search, deploy agent, etc.)
+3. **Phase Complete**: Call `log_activity` with event_type="phase_complete"
+4. **Milestone**: Call `render_progress` to generate progress.md (ONLY at phase boundaries)
+
+**Example Usage**:
+
+```typescript
+// Phase 0: Initialize session
+const session = await create_research_session({
+  topic: "AI Market Analysis",
+  output_dir: "RESEARCH/ai-market"
+});
+
+// Log phase start
+await log_activity({
+  session_id: session.session_id,
+  phase: 0,
+  event_type: "phase_start",
+  message: "Phase 0: Initialization",
+  output_dir: "RESEARCH/ai-market"
+});
+
+// Log phase complete
+await log_activity({
+  session_id: session.session_id,
+  phase: 0,
+  event_type: "phase_complete",
+  message: "Initialization complete",
+  output_dir: "RESEARCH/ai-market"
+});
+
+// Render progress (ONLY at phase milestones)
+await render_progress({
+  session_id: session.session_id,
+  output_dir: "RESEARCH/ai-market",
+  include_all_logs: false
+});
+```
 
 **Token Efficiency Guidelines**:
 
-1. ✅ **Append-only writes** - Never re-read entire log
-2. ✅ **Structured format** - Use tables for agents/MCP calls
-3. ✅ **Summary sections** - Not full details
-4. ✅ **Reference other files** - Don't duplicate content
-5. ✅ **Compact format** - One line per event
+- Call `log_activity` for major actions only (not every small step)
+- Call `render_progress` ONLY at phase boundaries (not after every log)
+- Use concise messages (one line per event)
 
 #### Initialize Progress Log (Phase 0)
 
@@ -504,6 +567,7 @@ def execute_phase_0_initialization(session_id, topic, output_dir):
 ```
 
 **Verification Checklist (MANDATORY)**:
+
 - [ ] `output_dir/` created
 - [ ] `progress.md` initialized (>100 bytes)
 - [ ] `init_session.py` created and EXECUTED
@@ -534,6 +598,7 @@ logger.log_phase_complete(phase_num, phase_name, summary, output_files)
 ```
 
 **Progress logging is MANDATORY for**:
+
 - [ ] Phase 0: Initialization
 - [ ] Phase 1: Question Refinement
 - [ ] Phase 2: Research Planning
@@ -580,6 +645,7 @@ finally:
 ```
 
 **Quality gates enforce**:
+
 - Phase 0: StateManager initialized, progress.md created
 - Phase 3: ≥80% agents succeeded, raw files created
 - Phase 4: ≥150 facts extracted, fact_ledger.md created
@@ -621,6 +687,7 @@ sm.close()
 ```
 
 **StateManager updates are MANDATORY at**:
+
 - [ ] Phase 0: Session created (status='initializing')
 - [ ] Phase 2: Status='planning'
 - [ ] Phase 3: Status='executing', all agents registered
@@ -704,6 +771,7 @@ def execute_phase_7_final_output(session_id, output_dir, synthesis, validation):
 ```
 
 **Phase 7 deliverables checklist (MANDATORY)**:
+
 - [ ] README.md (>2KB)
 - [ ] executive_summary.md (>3KB)
 - [ ] full_report.md (>10KB) ⚠️ REQUIRED (not optional)
@@ -714,6 +782,7 @@ def execute_phase_7_final_output(session_id, output_dir, synthesis, validation):
 - [ ] research_notes/ directory (research_plan.md)
 
 **Recommended** (warn if missing):
+
 - [ ] data/statistics.md
 - [ ] appendices/methodology.md
 - [ ] appendices/limitations.md

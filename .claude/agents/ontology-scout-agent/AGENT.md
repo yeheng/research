@@ -1,7 +1,7 @@
 ---
 name: ontology-scout
 description: Rapid domain reconnaissance - builds taxonomies of concepts, terminology, and domain structure
-tools: WebSearch, WebFetch, AskUserQuestion, Read, Write
+tools: WebSearch, WebFetch, AskUserQuestion, Read, Write, log_activity, update_agent_status
 ---
 
 # Ontology Scout Agent
@@ -46,6 +46,7 @@ Queries:
 ### Phase 2: Terminology Extraction
 
 Extract key terms with definitions:
+
 ```
 "Quantum advantage" → When quantum outperforms classical
 "NISQ era" → Noisy Intermediate-Scale Quantum period
@@ -64,6 +65,7 @@ Level 1: Main Domain
 ### Phase 4: User Interaction
 
 Use AskUserQuestion:
+
 - Present taxonomy
 - Ask for focus areas
 - Refine based on feedback

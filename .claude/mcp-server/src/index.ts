@@ -47,6 +47,34 @@ import {
   clearAllCaches,
 } from './tools/batch-tools.js';
 
+// State management tools
+import {
+  stateTools,
+  createSessionHandler,
+  updateSessionStatusHandler,
+  getSessionInfoHandler,
+} from './tools/state-tools.js';
+
+// Agent management tools
+import {
+  agentTools,
+  registerAgentHandler,
+  updateAgentStatusHandler,
+  getActiveAgentsHandler,
+} from './tools/agent-tools.js';
+
+// Phase tracking tools
+import {
+  phaseTools,
+  updateCurrentPhaseHandler,
+  getCurrentPhaseHandler,
+  checkpointPhaseHandler,
+} from './tools/phase-tools.js';
+
+// Logging tools
+import { loggingTools, logActivityHandler } from './tools/activity-logger.js';
+import { renderingTools, renderProgressHandler } from './tools/progress-renderer.js';
+
 // Create server instance
 const server = new Server(
   {
@@ -192,6 +220,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         description: 'Detect conflicts in multiple fact sets in parallel',
         inputSchema: batchInputSchema,
       },
+      // === State Management Tools ===
+      ...stateTools,
+      ...agentTools,
+      ...phaseTools,
+      // === Logging Tools ===
+      ...loggingTools,
+      ...renderingTools,
       // === Cache Management Tools ===
       {
         name: 'cache-stats',
@@ -250,6 +285,65 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'batch-conflict-detect':
         return await batchConflictDetect(args as any);
+
+      // State management tools
+      case 'create_research_session':
+        return {
+          content: [{ type: 'text', text: JSON.stringify(createSessionHandler(args), null, 2) }]
+        };
+
+      case 'update_session_status':
+        return {
+          content: [{ type: 'text', text: JSON.stringify(updateSessionStatusHandler(args), null, 2) }]
+        };
+
+      case 'get_session_info':
+        return {
+          content: [{ type: 'text', text: JSON.stringify(getSessionInfoHandler(args), null, 2) }]
+        };
+
+      // Agent management tools
+      case 'register_agent':
+        return {
+          content: [{ type: 'text', text: JSON.stringify(registerAgentHandler(args), null, 2) }]
+        };
+
+      case 'update_agent_status':
+        return {
+          content: [{ type: 'text', text: JSON.stringify(updateAgentStatusHandler(args), null, 2) }]
+        };
+
+      case 'get_active_agents':
+        return {
+          content: [{ type: 'text', text: JSON.stringify(getActiveAgentsHandler(args), null, 2) }]
+        };
+
+      // Phase tracking tools
+      case 'update_current_phase':
+        return {
+          content: [{ type: 'text', text: JSON.stringify(updateCurrentPhaseHandler(args), null, 2) }]
+        };
+
+      case 'get_current_phase':
+        return {
+          content: [{ type: 'text', text: JSON.stringify(getCurrentPhaseHandler(args), null, 2) }]
+        };
+
+      case 'checkpoint_phase':
+        return {
+          content: [{ type: 'text', text: JSON.stringify(checkpointPhaseHandler(args), null, 2) }]
+        };
+
+      // Logging tools
+      case 'log_activity':
+        return {
+          content: [{ type: 'text', text: JSON.stringify(await logActivityHandler(args), null, 2) }]
+        };
+
+      case 'render_progress':
+        return {
+          content: [{ type: 'text', text: JSON.stringify(renderProgressHandler(args), null, 2) }]
+        };
 
       // Cache management
       case 'cache-stats':

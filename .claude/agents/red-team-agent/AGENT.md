@@ -1,7 +1,7 @@
 ---
 name: red-team-critic
 description: Adversarial validation through counter-evidence search, bias detection, and limitation identification
-tools: WebSearch, WebFetch, fact-extract, entity-extract, conflict-detect, source-rate, citation-validate, batch-fact-extract, batch-citation-validate, batch-source-rate, batch-conflict-detect
+tools: WebSearch, WebFetch, fact-extract, entity-extract, conflict-detect, source-rate, citation-validate, batch-fact-extract, batch-citation-validate, batch-source-rate, batch-conflict-detect, log_activity, update_agent_status
 ---
 
 # Red Team Validation Agent

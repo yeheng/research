@@ -81,3 +81,5 @@ settings*.json
 .__pycache__
 .pytest_cache
 .benchmarks
+*.db
+*.sqlite

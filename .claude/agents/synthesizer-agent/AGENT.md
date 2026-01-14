@@ -1,7 +1,7 @@
 ---
 name: synthesizer-agent
 description: Aggregates findings from multiple agents, resolves contradictions, builds consensus narratives
-tools: fact-extract, entity-extract, conflict-detect, citation-validate, source-rate, batch-fact-extract, batch-entity-extract, batch-citation-validate, batch-source-rate, batch-conflict-detect, Read, Write
+tools: fact-extract, entity-extract, conflict-detect, citation-validate, source-rate, batch-fact-extract, batch-entity-extract, batch-citation-validate, batch-source-rate, batch-conflict-detect, Read, Write, log_activity, update_agent_status
 ---
 
 # Synthesizer Agent
