@@ -420,6 +420,322 @@ Research context query:
 }
 ```
 
+## ⚠️ MANDATORY REQUIREMENTS (CRITICAL)
+
+**These requirements are MANDATORY and must be enforced in every research execution. Failure to follow these requirements will result in incomplete research sessions.**
+
+### Requirement 1: StateManager Initialization (Phase 0)
+
+**CRITICAL**: Phase 0 **MUST** execute `init_session.py` and verify database state.
+
+```python
+def execute_phase_0_initialization(session_id, topic, output_dir):
+    """
+    Phase 0: Initialization - MANDATORY StateManager setup
+
+    This phase MUST complete successfully before any other phase starts.
+    """
+    import subprocess
+    import sys
+
+    # Step 1: Create directories
+    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(f"{output_dir}/raw", exist_ok=True)
+    os.makedirs(f"{output_dir}/processed", exist_ok=True)
+    os.makedirs(f"{output_dir}/research_notes", exist_ok=True)
+    os.makedirs(f"{output_dir}/sources", exist_ok=True)
+
+    # Step 2: Initialize progress logger
+    from .claude.shared.utils.progress_logger import ProgressLogger
+
+    progress_file = f"{output_dir}/progress.md"
+    logger = ProgressLogger(progress_file)
+    logger.initialize(session_id, topic)
+    logger.log_phase_start(0, "Initialization", "Creating directories and initializing StateManager")
+
+    # Step 3: Create init_session.py script
+    init_script_path = f"{output_dir}/init_session.py"
+    create_init_session_script(session_id, topic, output_dir, init_script_path)
+
+    # Step 4: ⚠️ CRITICAL - EXECUTE the init script
+    result = subprocess.run(
+        [sys.executable, init_script_path],
+        capture_output=True,
+        text=True,
+        cwd=output_dir
+    )
+
+    if result.returncode != 0:
+        error_msg = f"StateManager initialization failed:\n{result.stderr}"
+        logger.log_error("E001", error_msg, "Cannot proceed - fix StateManager setup")
+        raise RuntimeError(error_msg)
+
+    print(result.stdout)  # Show success message
+
+    # Step 5: ⚠️ CRITICAL - VERIFY database state
+    from scripts.state_manager import StateManager
+
+    sm = StateManager()
+    session = sm.get_session(session_id)
+
+    if not session:
+        error_msg = f"Session {session_id} not found in database after initialization"
+        logger.log_error("E002", error_msg, "StateManager verification failed")
+        sm.close()
+        raise RuntimeError(error_msg)
+
+    if session.status != 'initializing':
+        logger.log_error("E003", f"Session status is '{session.status}', expected 'initializing'", "Database state inconsistent")
+
+    sm.close()
+
+    # Step 6: Complete Phase 0
+    logger.log_phase_complete(0, "Initialization",
+                               "Directories created, StateManager initialized and verified",
+                               [init_script_path])
+
+    # ✅ Phase 0 completed successfully
+    return {
+        'status': 'completed',
+        'session_id': session_id,
+        'output_dir': output_dir,
+        'progress_file': progress_file
+    }
+```
+
+**Verification Checklist (MANDATORY)**:
+- [ ] `output_dir/` created
+- [ ] `progress.md` initialized (>100 bytes)
+- [ ] `init_session.py` created and EXECUTED
+- [ ] Session exists in StateManager database
+- [ ] Session status = 'initializing'
+
+**If any check fails**: STOP execution and report error to user.
+
+---
+
+### Requirement 2: Progress Logging (All Phases)
+
+**CRITICAL**: Every phase **MUST** update `progress.md` at start and completion.
+
+```python
+from .claude.shared.utils.progress_logger import ProgressLogger
+
+# Load logger (created in Phase 0)
+logger = ProgressLogger(f"{output_dir}/progress.md")
+
+# ✅ MANDATORY: Log phase start
+logger.log_phase_start(phase_num, phase_name, brief_description)
+
+# ... execute phase work ...
+
+# ✅ MANDATORY: Log phase completion
+logger.log_phase_complete(phase_num, phase_name, summary, output_files)
+```
+
+**Progress logging is MANDATORY for**:
+- [ ] Phase 0: Initialization
+- [ ] Phase 1: Question Refinement
+- [ ] Phase 2: Research Planning
+- [ ] Phase 3: Iterative Querying (+ agent deployments)
+- [ ] Phase 4: Source Triangulation (+ MCP calls)
+- [ ] Phase 5: Knowledge Synthesis
+- [ ] Phase 6: Quality Assurance
+- [ ] Phase 7: Final Output
+
+**If progress.md is not updated**: User will assume research is stuck or failed.
+
+---
+
+### Requirement 3: Quality Gate Validation (After Each Phase)
+
+**CRITICAL**: Each phase **MUST** pass validation before proceeding to next phase.
+
+```python
+from .claude.shared.utils.phase_validator import PhaseValidator
+
+# After completing Phase N
+validator = PhaseValidator(session_id, output_dir)
+
+try:
+    result = validator.validate_phase_N()  # N = 0-7
+
+    # Log validation result
+    logger.log_quality_gate(N, "PASSED", {
+        "warnings": len(result.get("warnings", []))
+    })
+
+    # Proceed to Phase N+1
+
+except ValidationError as e:
+    # Quality gate FAILED
+    logger.log_quality_gate(N, "FAILED", {"error": str(e)})
+    logger.log_error(f"E00{N}", f"Phase {N} validation failed", "Fix issues before proceeding")
+
+    # ⚠️ DO NOT proceed to next phase
+    raise RuntimeError(f"Phase {N} failed validation: {e}")
+
+finally:
+    validator.close()
+```
+
+**Quality gates enforce**:
+- Phase 0: StateManager initialized, progress.md created
+- Phase 3: ≥80% agents succeeded, raw files created
+- Phase 4: ≥150 facts extracted, fact_ledger.md created
+- Phase 5: ≥30 citations, executive_summary.md created
+- Phase 7: All required files and directories present
+
+**If validation fails**: FIX the issue, don't skip validation.
+
+---
+
+### Requirement 4: StateManager Updates (Throughout Execution)
+
+**CRITICAL**: Update StateManager status at key checkpoints.
+
+```python
+from scripts.state_manager import StateManager, SessionStatus, AgentStatus
+
+sm = StateManager()
+
+# ✅ Update session status
+sm.update_session_status(session_id, SessionStatus.EXECUTING.value)
+
+# ✅ Register each agent
+sm.register_agent(ResearchAgent(
+    agent_id='agent_01',
+    session_id=session_id,
+    agent_type='web-research',
+    status=AgentStatus.RUNNING.value,
+    output_file='raw/agent_01.md'  # Path only, not content
+))
+
+# ✅ Update agent on completion
+sm.update_agent_status('agent_01', AgentStatus.COMPLETED.value)
+
+# ✅ Final status update
+sm.update_session_status(session_id, SessionStatus.COMPLETED.value)
+
+sm.close()
+```
+
+**StateManager updates are MANDATORY at**:
+- [ ] Phase 0: Session created (status='initializing')
+- [ ] Phase 2: Status='planning'
+- [ ] Phase 3: Status='executing', all agents registered
+- [ ] Phase 3: Each agent completion (status='completed')
+- [ ] Phase 5: Status='synthesizing'
+- [ ] Phase 6: Status='validating'
+- [ ] Phase 7: Status='completed', completed_at timestamp set
+
+**If StateManager is not updated**: Recovery and debugging become impossible.
+
+---
+
+### Requirement 5: Deliverables Verification (Phase 7)
+
+**CRITICAL**: Phase 7 **MUST** verify all deliverables before declaring completion.
+
+```python
+def execute_phase_7_final_output(session_id, output_dir, synthesis, validation):
+    """
+    Phase 7: Final Output - MANDATORY deliverables check
+    """
+    logger = ProgressLogger(f"{output_dir}/progress.md")
+    logger.log_phase_start(7, "Final Output", "Generating all deliverables")
+
+    # Generate all documents
+    generate_all_documents(output_dir, synthesis, validation)
+
+    # ⚠️ CRITICAL - VERIFY ALL DELIVERABLES
+    validator = PhaseValidator(session_id, output_dir)
+
+    try:
+        result = validator.validate_phase_7()
+
+        if result['status'] != 'passed':
+            missing_files = result.get('errors', [])
+            raise RuntimeError(f"Deliverables incomplete:\n" + "\n".join(missing_files))
+
+        # Log any warnings
+        if result.get('warnings'):
+            for warning in result['warnings']:
+                logger.log_error("W001", warning, "Consider adding recommended files")
+
+        # All checks passed
+        logger.log_quality_gate(7, "PASSED", {
+            "all_files_created": True,
+            "warnings": len(result.get('warnings', []))
+        })
+
+    except ValidationError as e:
+        logger.log_quality_gate(7, "FAILED", {"error": str(e)})
+        raise RuntimeError(f"Phase 7 validation failed: {e}")
+
+    finally:
+        validator.close()
+
+    # Update StateManager to completed
+    sm = StateManager()
+    sm.update_session_status(session_id, SessionStatus.COMPLETED.value)
+    sm.update_session(session_id, completed_at=datetime.utcnow())
+    sm.close()
+
+    # Finalize progress log
+    logger.finalize({
+        'total_agents': len(agent_results),
+        'total_sources': len(all_sources),
+        'total_facts': len(all_facts),
+        'execution_time_minutes': calculate_duration(),
+        'quality_score': synthesis.quality_score
+    })
+
+    logger.log_phase_complete(7, "Final Output",
+                               "All deliverables generated and verified",
+                               ["README.md", "executive_summary.md", "full_report.md", "..."])
+
+    # ✅ Research complete
+    return {
+        'status': 'completed',
+        'output_dir': output_dir,
+        'quality_score': synthesis.quality_score
+    }
+```
+
+**Phase 7 deliverables checklist (MANDATORY)**:
+- [ ] README.md (>2KB)
+- [ ] executive_summary.md (>3KB)
+- [ ] full_report.md (>10KB) ⚠️ REQUIRED (not optional)
+- [ ] progress.md (>1KB, all phases logged)
+- [ ] raw/ directory (agent outputs)
+- [ ] processed/ directory (fact_ledger.md, etc.)
+- [ ] sources/ directory (bibliography.md)
+- [ ] research_notes/ directory (research_plan.md)
+
+**Recommended** (warn if missing):
+- [ ] data/statistics.md
+- [ ] appendices/methodology.md
+- [ ] appendices/limitations.md
+
+**If any required file is missing**: DO NOT mark research as complete.
+
+---
+
+### Enforcement Summary
+
+| Requirement | Phase | Enforcement Level | Penalty for Non-Compliance |
+|-------------|-------|-------------------|----------------------------|
+| StateManager Init | 0 | MANDATORY | Cannot proceed to Phase 1 |
+| Progress Logging | 0-7 | MANDATORY | User thinks research failed |
+| Quality Gates | 0-7 | MANDATORY | Incomplete/invalid research |
+| StateManager Updates | 0,3,7 | MANDATORY | Cannot resume if interrupted |
+| Deliverables Check | 7 | MANDATORY | Research marked incomplete |
+
+**These are not optional guidelines - they are MANDATORY requirements.**
+
+---
+
 ## Development Workflow
 
 Execute 7-phase research workflow through systematic stages:
@@ -1086,6 +1402,41 @@ RESEARCH/[topic]/
 ```
 
 ## Excellence Checklist
+
+### ⚠️ MANDATORY Requirements (Check FIRST)
+
+**These must ALL be checked before declaring research complete. Non-compliance = incomplete research.**
+
+- [ ] **StateManager Initialization** (Requirement 1):
+  - [ ] `init_session.py` created AND executed
+  - [ ] Session exists in StateManager database
+  - [ ] Session status correct at each phase
+- [ ] **Progress Logging** (Requirement 2):
+  - [ ] `progress.md` initialized in Phase 0
+  - [ ] ALL phases (0-7) logged with start/complete
+  - [ ] Agent deployments table created and updated
+  - [ ] MCP calls table created and logged
+- [ ] **Quality Gate Validation** (Requirement 3):
+  - [ ] Phase 0 validated (StateManager + progress.md)
+  - [ ] Phase 3 validated (≥80% agents, raw files exist)
+  - [ ] Phase 4 validated (≥150 facts, fact_ledger.md exists)
+  - [ ] Phase 5 validated (≥30 citations, executive_summary.md exists)
+  - [ ] Phase 7 validated (all deliverables present)
+- [ ] **StateManager Updates** (Requirement 4):
+  - [ ] Session status updated at Phases 0, 2, 3, 5, 6, 7
+  - [ ] All agents registered in database
+  - [ ] All agent completions recorded
+  - [ ] Final status set to 'completed' with timestamp
+- [ ] **Deliverables Verification** (Requirement 5):
+  - [ ] README.md (>2KB)
+  - [ ] executive_summary.md (>3KB)
+  - [ ] full_report.md (>10KB) ⚠️ REQUIRED
+  - [ ] progress.md (>1KB, all phases)
+  - [ ] All directories created (raw/, processed/, sources/, research_notes/)
+
+**If ANY checkbox above is unchecked**: Research is INCOMPLETE. Fix before finalizing.
+
+---
 
 ### Phase Completion
 
