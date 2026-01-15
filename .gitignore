@@ -82,4 +82,5 @@ settings*.json
 .pytest_cache
 .benchmarks
 *.db
-*.sqlite
+*.db-shm
+*.db-wal
