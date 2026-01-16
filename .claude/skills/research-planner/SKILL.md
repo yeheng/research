@@ -1,46 +1,43 @@
 ---
 name: research-planner
-description: Create detailed research plans by decomposing structured prompts into subtopics, search strategies, and agent deployment configurations. Extracted from Phase 2 of research-executor for standalone planning capabilities.
+description: 创建详细研究计划，将结构化提示分解为子主题、搜索策略和Agent部署配置
+user_invocable: true
 ---
 
 # Research Planner
 
-## Overview
+## Purpose
 
-Takes a structured research prompt (from question-refiner) and creates a comprehensive execution plan with subtopic decomposition, search strategies, and multi-agent deployment configuration.
+薄包装 Skill，负责输入验证并调用 `phase-2-planning` Agent 创建研究执行计划。
 
-## When to Use
+## Input
 
-- User has structured prompt and wants to review plan before execution
-- Need to estimate resources (agents, time, cost) for research
-- Want to modify/approve plan before committing to execution
-- Planning complex research requiring strategic review
+**Required**: 结构化研究提示（来自 question-refiner）
 
-## Architecture Position
+**Optional**:
 
+- `complexity`: low | medium | high
+- `budget_tokens`: 最大 token 预算
+- `max_agents`: 最大 Agent 数量 (3-8)
+
+## Execution
+
+```text
+1. 验证结构化提示包含必需字段
+2. 调用 Task 工具:
+   - subagent_type: "phase-2-planning"
+   - prompt: 结构化提示 + 可选参数
+3. 返回研究计划
 ```
-question-refiner (structured prompt)
-         ↓
-   research-planner (this skill)
-         ↓
-   research-executor (validates & executes)
-```
 
-## Input Requirements
-
-**Required**: Structured prompt with TASK, CONTEXT, SPECIFIC_QUESTIONS, KEYWORDS, CONSTRAINTS, OUTPUT_FORMAT
-
-**Optional**: Complexity level, budget constraints, preferred agent types
-
-## Output Structure
+## Output
 
 ```markdown
 # Research Plan: [Topic]
 
 ## 1. Executive Summary
 - Topic, Research Type, Complexity
-- Estimated Duration: [15-90 min]
-- Estimated Cost: [$X]
+- Estimated Agents: [3-8]
 
 ## 2. Subtopic Decomposition
 [3-7 subtopics with priority]
@@ -48,68 +45,37 @@ question-refiner (structured prompt)
 ## 3. Search Strategies
 [3-5 queries per subtopic]
 
-## 4. Data Sources
-| Source Type | Priority | Rationale |
+## 4. Agent Deployment
+| Agent | Focus | Model |
+|-------|-------|-------|
 
-## 5. Agent Deployment
-- Total Agents: [3-8]
-- Model Mix: [sonnet + haiku]
-- Assignments per agent
-
-## 6. Resource Estimation
-| Resource | Estimate |
-|----------|----------|
-| Time | X min |
-| Tokens | X |
-| Agents | X |
-
-## 7. Quality Gates
+## 5. Quality Gates
 - Phase 3: ≥80% agent success
 - Phase 5: ≥30 citations
 - Final: Quality ≥8.0
 
-## 8. Approval Options
-✅ Approve | 🔧 Modify | 🔄 Alternative | ❌ Cancel
+## 6. Approval Options
+[Approve] [Modify] [Cancel]
 ```
 
-## Agent Deployment Matrix
+## Error Codes
 
-| Research Type | Agents | Model Mix |
-|---------------|--------|-----------|
-| Quick Query | 2-3 | All haiku |
-| Standard | 4-5 | 2 sonnet + 3 haiku |
-| Deep Research | 6-8 | 3-4 sonnet + rest haiku |
-| Technical | 3-5 | All sonnet |
+| Code | Description        | Action           |
+|------|--------------------|------------------|
+| E001 | 提示不完整         | 请求缺失字段     |
+| E002 | Agent 规划失败     | 重试             |
 
-## Resource Estimation
+## Example
 
+```text
+User: /research-planner [STRUCTURED_PROMPT]
+
+Skill:
+1. 验证提示结构
+2. 调用 phase-2-planning agent
+3. 返回研究计划供用户审批
 ```
-Time (min) = 15 + (subtopics × 5) + (agents × 3)
-Tokens = agents × 15,000 + 10,000 (overhead)
-```
-
-## Plan Modification Support
-
-Users can request:
-- Add/remove subtopics
-- Adjust agent count or model mix
-- Change time/cost budget
-- Modify search strategies
-
-## Integration
-
-**Upstream**: `question-refiner` (structured prompt)
-**Downstream**: `research-executor` (execution plan)
-**Parallel**: `ontology-scout` (domain reconnaissance)
 
 ---
 
-**See also**: [Skill Base Template](../../shared/templates/skill_base_template.md)
-
-## Examples
-
-See [examples.md](./examples.md) for planning scenarios.
-
-## Detailed Instructions
-
-See [instructions.md](./instructions.md) for implementation guide.
+**Agent**: `phase-2-planning` 处理子主题分解和资源估算

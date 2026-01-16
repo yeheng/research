@@ -1,7 +1,7 @@
 ---
 name: got-agent
 description: Graph of Thoughts optimization through path generation, scoring, aggregation, and pruning
-tools: WebSearch, WebFetch, Read, Write, fact-extract, conflict-detect, source-rate, log_activity, get_session_info
+tools: WebSearch, WebFetch, Read, Write, extract, conflict-detect, validate, log_activity, get_session_info
 ---
 
 # Graph of Thoughts Agent
@@ -87,7 +87,7 @@ EVALUATE → CHECK TERMINATION → CHOOSE OPERATION → EXECUTE → PERSIST
 - **Orchestrator**: Handles complex subtopics
 - **Synthesizer**: Receives optimized findings
 - **Red-team**: Quality validation
-- **State Tools**: Use `log_activity` for progress tracking, `get_session_info` for session data
+- **State Tools**: Use `mcp__deep-research__log_activity` for progress tracking, `mcp__deep-research__get_session_info` for session data
 
 ---
 

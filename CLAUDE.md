@@ -132,7 +132,7 @@ RESEARCH/[topic_name]/
 - Apply Chain-of-Verification to prevent hallucinations
 - Use Graph of Thoughts to optimize research paths
 
-## Refactored Architecture (v2.0)
+## Refactored Architecture (v2.1)
 
 The framework uses a **3-layer architecture** with clear separation of concerns:
 
@@ -140,23 +140,30 @@ The framework uses a **3-layer architecture** with clear separation of concerns:
 ┌─────────────────────────────────────┐
 │  Layer 1: Skills (User-Invocable)   │
 │  - question-refiner                 │  ← Thin wrappers
-│  - research-planner (NEW)           │  ← Input validation
+│  - research-planner                 │  ← Input validation
 │  - research-executor                │  ← Agent invocation
 └──────────────┬──────────────────────┘
                │ invokes
 ┌──────────────▼──────────────────────┐
-│  Layer 2: Agents (Autonomous)       │
-│  - research-orchestrator-agent      │  ← Master coordinator
-│  - got-agent                        │  ← Path optimization
-│  - red-team-agent                   │  ← Quality validation
-│  - synthesizer-agent                │  ← Findings aggregation
-│  - ontology-scout-agent             │  ← Domain recon
+│  Layer 2: Built-in Agent Types      │
+│  ┌─ Research Execution ──────────┐  │
+│  │  - general-purpose (embedded  │  │  ← Executes 7-phase workflow
+│  │    coordinator workflow)      │  │
+│  └──────────────────────────────┘  │
+│  ┌─ Agent Definitions (DOCS) ────┐  │
+│  │  - phase-N-refinement         │  │  ← Workflow definitions
+│  │  - synthesizer-agent          │  │     stored as reference
+│  │  - red-team-agent             │  │
+│  └──────────────────────────────┘  │
 └──────────────┬──────────────────────┘
                │ uses
 ┌──────────────▼──────────────────────┐
 │  Layer 3: Infrastructure            │
 │  - MCP Tools (5 core + 5 batch)     │  ← Data processing
-│  - StateManager (SQLite)            │  ← State tracking
+│  - UnifiedStateManager (SQLite)     │  ← Single source of truth
+│  - TokenBudgetManager               │  ← Budget enforcement
+│  - RecoveryHandler                  │  ← Checkpoint recovery
+│  - ContentCompressor                │  ← Token optimization
 └─────────────────────────────────────┘
 ```
 
@@ -168,7 +175,7 @@ Skills are located in `.claude/skills/`:
 |-------|---------|------|
 | `question-refiner` | Transform questions into structured prompts with validation | Enhanced ✨ |
 | `research-planner` | Create detailed execution plans with resource estimates | NEW 🆕 |
-| `research-executor` | Validate inputs and invoke research-orchestrator-agent | Refactored 🔧 |
+| `research-executor` | Validate inputs and invoke general-purpose agent (with embedded coordinator workflow) | Refactored 🔧 |
 
 **Key Changes**:
 
@@ -182,30 +189,45 @@ Each skill has:
 - `instructions.md`: Detailed implementation guidance
 - `examples.md`: Usage examples
 
-### Agents System
+### Agent Workflow Definitions
 
-Agents are located in `.claude/agents/`:
+Agent workflow definitions are located in `.claude/agents/`:
 
-| Agent | Purpose | Autonomy Level |
-|-------|---------|----------------|
-| `research-orchestrator-agent` | Master coordinator for 7-phase workflow | Very High |
-| `got-agent` | Graph of Thoughts optimization | High |
-| `red-team-agent` | Adversarial validation | High |
-| `synthesizer-agent` | Findings aggregation & conflict resolution | High |
-| `ontology-scout-agent` | Domain reconnaissance & taxonomy building | Medium |
+**IMPORTANT**: These are **NOT** actual agent types - they are workflow documentation and reference material. The actual execution uses Claude Code's built-in `general-purpose` agent type with embedded workflow instructions.
 
-**Agent Characteristics**:
+**Coordinator Workflow**:
 
-- Autonomous decision-making
-- Multi-step reasoning
-- Tool access (MCP + StateManager)
-- Error recovery capabilities
+| Definition | Purpose | Lines |
+|------------|---------|-------|
+| `coordinator/AGENT.md` | Lightweight orchestrator workflow, delegates to phase-specific workflows | ~280 |
 
-Each agent has:
+**Phase Agent Workflows** (Reference documentation):
 
-- `AGENT.md`: YAML frontmatter + comprehensive workflow
-- Detailed phase-by-phase execution guide
-- Excellence checklist and best practices
+| Definition | Purpose | Lines |
+|------------|---------|-------|
+| `phase-1-refinement` | Question clarification and structuring workflow | ~190 |
+| `phase-2-planning` | Subtopic decomposition and agent planning workflow | ~210 |
+| `phase-3-execution` | Parallel agent deployment and collection workflow | ~280 |
+| `phase-4-processing` | MCP-based fact/entity extraction workflow | ~290 |
+| `phase-5-synthesis` | Knowledge synthesis with citations workflow | ~210 |
+| `phase-6-validation` | Citation validation and red-team review workflow | ~220 |
+| `phase-7-output` | Final deliverable generation workflow | ~260 |
+
+**Support Agent Workflows**:
+
+| Definition | Purpose | Autonomy Level |
+|------------|---------|----------------|
+| `synthesizer-agent` | Findings aggregation & conflict resolution workflow | High |
+| `red-team-agent` | Adversarial validation workflow | High |
+| `got-agent` | Graph of Thoughts optimization workflow | High |
+| `ontology-scout-agent` | Domain reconnaissance & taxonomy building workflow | Medium |
+
+**How It Works**:
+
+1. Skills (like `research-executor`) invoke the `general-purpose` agent
+2. The skill embeds workflow instructions from these AGENT.md files
+3. The agent executes the 7-phase workflow using those instructions
+4. Each phase's logic is defined in the corresponding AGENT.md reference file
 
 ### MCP Tools
 
@@ -225,22 +247,50 @@ MCP server located in `.claude/mcp-server/`:
 - Parallel processing with caching
 - Intelligent deduplication
 
+**State Tools** (11):
+
+- Session: `create_research_session`, `update_session_status`, `get_session_info`
+- Agent: `register_agent`, `update_agent_status`, `get_active_agents`
+- Phase: `update_current_phase`, `get_current_phase`, `checkpoint_phase`
+- Logging: `log_activity`, `render_progress`
+
 **Cache Management** (2):
 
 - `cache-stats`: Get cache statistics
 - `cache-clear`: Clear all caches
 
-### State Management
+### State Management (v2.1)
 
-StateManager (`scripts/state_manager.py`):
+**UnifiedStateManager** (`.claude/mcp-server/src/state/unified-state-manager.ts`):
 
-- Research sessions with lifecycle tracking
-- GoT graph state persistence
-- Agent coordination and monitoring
-- Fact ledger with conflict detection
-- Entity graph with relationships
-- Citation quality tracking
-- Thread-safe, ACID-compliant SQLite backend
+- SQLite as **single source of truth**
+- Event emission for reactive updates
+- Automatic progress.md rendering from database
+- Session, Agent, and Phase lifecycle management
+
+**DEPRECATED**:
+
+- ❌ `scripts/state_manager.py` - Use MCP state tools instead
+- ❌ `scripts/resume_research.py` - Use RecoveryHandler instead
+- ❌ Manual progress.md editing - Use `log_activity` + `render_progress`
+
+### Token Management (NEW)
+
+**TokenBudgetManager** (`.claude/mcp-server/src/utils/token-budget.ts`):
+
+- Per-session budget allocation (default: 500K tokens)
+- Phase-level budget distribution
+- Automatic warnings at 80% threshold
+- Hard limit enforcement option
+
+### Recovery System (NEW)
+
+**RecoveryHandler** (`.claude/mcp-server/src/utils/recovery-handler.ts`):
+
+- Checkpoint-based recovery
+- Automatic interruption detection
+- Recovery plan generation
+- Minimal rework on resume
 
 ## Tool Permissions
 

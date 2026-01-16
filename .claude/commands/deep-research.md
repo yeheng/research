@@ -4,9 +4,9 @@ argument-hint: [research topic or question]
 allowed-tools: Task, WebSearch, WebFetch, mcp__web_reader__webReader, Read, Write, TodoWrite, Skill
 ---
 
-# Deep Research Command (v2.0 - Refactored)
+# Deep Research Command (v2.1 - Phase Agent Architecture)
 
-Execute the complete 7-phase deep research workflow using the **refactored agent-based architecture** with enhanced skill separation and autonomous agent coordination.
+Execute the complete 7-phase deep research workflow using the **Phase Agent Architecture** with specialized agents for each research phase.
 
 ## Research Topic
 
@@ -14,7 +14,7 @@ $ARGUMENTS
 
 ---
 
-## Architecture Overview (Post-Refactoring)
+## Architecture Overview (v2.1)
 
 ```
 User → deep-research command
@@ -23,18 +23,21 @@ User → deep-research command
        ↓
    research-planner skill → execution plan (OPTIONAL)
        ↓
-   research-executor skill → validates & invokes agent
+   research-executor skill → validates & invokes general-purpose agent (with coordinator workflow)
        ↓
-   research-orchestrator-agent → executes all 7 phases
+   general-purpose agent → executes 7-phase research workflow
        ↓
    RESEARCH/[topic]/ → final output
 ```
 
-**Key Changes from v1.0**:
-- Skills are now thin wrappers that delegate to agents
-- Orchestrator agent handles all phase logic
-- Better separation: Skills = validation, Agents = execution
-- StateManager tracks all research state centrally
+**v2.1 Architecture**:
+- Skills are thin wrappers that delegate to built-in agents
+- General-purpose agent executes the 7-phase workflow (coordinator pattern embedded in prompt)
+- Each phase handles specific research tasks
+- UnifiedStateManager (SQLite) tracks all state
+- MCP tools for standardized data processing
+
+**IMPORTANT**: The framework uses Claude Code's built-in `general-purpose` agent type, NOT custom agent types like `coordinator` or `phase-N-name`. The phase workflow is implemented through prompt instructions, not custom agent types.
 
 ---
 
@@ -89,7 +92,7 @@ Invoke question-refiner to transform raw question into structured prompt:
 
 4. **Output Validation** (automatic)
    - JSON schema validation
-   - Quality score ≥ 8.0 required
+   - Quality score >= 8.0 required
    - Automatic refinement if needed
 ```
 
@@ -128,83 +131,133 @@ If yes:
 
 ---
 
-### Phase 1-7: Research Execution (agent-based)
+### Phase 1-7: Research Execution (Phase Agent Architecture)
 
-**Use `research-executor` skill → `research-orchestrator-agent`**:
+**Use `research-executor` skill -> `general-purpose` agent (with embedded coordinator workflow)**:
 
 ```markdown
 Invoke research-executor with structured prompt:
 
 The skill will:
 1. Validate prompt completeness
-2. Prepare agent context
-3. Invoke research-orchestrator-agent
+2. Prepare agent context with coordinator workflow instructions
+3. Invoke general-purpose agent with embedded workflow
 4. Monitor progress
 5. Return results
 
-The agent will autonomously execute:
-├── Phase 1: Question Refinement (validate)
-├── Phase 2: Research Planning (if not done in Phase 0.5)
-├── Phase 3: Multi-Agent Deployment (parallel)
-│   ├── Web research agents (3-5)
-│   ├── Academic/technical agents (1-2)
-│   └── Cross-reference agent (1)
-├── Phase 4: Source Triangulation (conflict detection)
-├── Phase 5: Knowledge Synthesis (synthesizer-agent)
-├── Phase 6: Quality Assurance (red-team-agent)
-└── Phase 7: Output Generation (structured files)
+The general-purpose agent will autonomously execute the 7-phase workflow:
+├── Phase 1: Question Refinement
+│   └─ Output: research_notes/refined_question.md
+├── Phase 2: Research Planning
+│   └─ Output: research_notes/research_plan.md
+├── Phase 3: Multi-Agent Deployment
+│   └─ Output: raw/agent_*.md (multiple files)
+├── Phase 4: Source Processing
+│   └─ Output: processed/fact_ledger.md, entity_graph.md, conflict_report.md
+├── Phase 5: Knowledge Synthesis
+│   └─ Output: drafts/synthesis.md
+├── Phase 6: Validation
+│   └─ Output: drafts/validated_report.md
+└── Phase 7: Output Generation
+    └─ Output: Final deliverables
 ```
 
-**Key Difference**: All orchestration logic is now in the agent, not the skill.
+**Key Implementation Detail**: The 7-phase workflow is implemented via prompt instructions to the `general-purpose` agent, NOT through custom agent types. The agent definitions in `.claude/agents/` serve as documentation and reference for the workflow structure.
 
 ---
 
-## Agent Coordination (Behind the Scenes)
+## Phase Agent Details
 
-The research-orchestrator-agent will invoke:
+### Phase 1: Refinement (phase-1-refinement)
+- Validates structured question
+- Ensures completeness
+- Quality scoring
 
-### Supporting Agents
-1. **ontology-scout-agent** (if unfamiliar domain)
-   - Domain reconnaissance
-   - Terminology mapping
-   - Taxonomy building
+### Phase 2: Planning (phase-2-planning)
+- Subtopic decomposition
+- Search strategy generation
+- Agent deployment planning
 
-2. **got-agent** (if complex topic, optional)
-   - Graph of Thoughts optimization
-   - Path scoring and pruning
-   - Quality-driven exploration
+### Phase 3: Execution (phase-3-execution)
+- Deploys 3-8 parallel research agents
+- Collects raw findings
+- Handles agent failures
 
-3. **Research Agents** (3-8 parallel)
-   - Web research (haiku/sonnet mix)
-   - Academic research (sonnet)
-   - Cross-reference verification (haiku)
+### Phase 4: Processing (phase-4-processing)
+- Fact extraction via MCP tools
+- Entity extraction
+- Conflict detection
+- Source quality rating
 
-4. **synthesizer-agent** (Phase 5)
-   - Aggregate findings
-   - Resolve contradictions
-   - Build consensus narrative
-   - Generate structured reports
+### Phase 5: Synthesis (phase-5-synthesis)
+- Aggregates findings
+- Resolves contradictions
+- Generates coherent narrative
 
-5. **red-team-agent** (Phase 6)
-   - Adversarial validation
-   - Counter-evidence search
-   - Bias detection
-   - Confidence adjustment
+### Phase 6: Validation (phase-6-validation)
+- Citation verification
+- Red-team adversarial review
+- Confidence scoring
 
-### MCP Tools Used by Agents
-- `fact-extract`: Extract atomic facts
-- `entity-extract`: Build knowledge graph
-- `citation-validate`: Verify citations
-- `source-rate`: A-E quality ratings
-- `conflict-detect`: Find contradictions
+### Phase 7: Output (phase-7-output)
+- Generates final deliverables
+- Formats reports
+- Creates bibliography
 
-### StateManager Integration
-- Tracks research session state
-- Manages GoT graph (if used)
-- Coordinates agent statuses
-- Stores fact ledger
-- Maintains entity graph
-- Records citations
+---
+
+## Supporting Agents
+
+### synthesizer-agent
+- Aggregates findings from multiple sources
+- Builds consensus narratives
+- Resolves contradictions
+
+### red-team-agent
+- Adversarial validation
+- Counter-evidence search
+- Bias detection
+
+### got-agent
+- Graph of Thoughts optimization
+- Path scoring and pruning
+- Quality-driven exploration
+
+### ontology-scout-agent
+- Domain reconnaissance
+- Terminology mapping
+- Taxonomy building
+
+---
+
+## MCP Tools Used
+
+### Core Tools (5)
+- `mcp__deep-research__fact-extract`: Extract atomic facts
+- `mcp__deep-research__entity-extract`: Named entity recognition
+- `mcp__deep-research__citation-validate`: Verify citations
+- `mcp__deep-research__source-rate`: A-E quality ratings
+- `mcp__deep-research__conflict-detect`: Find contradictions
+
+### Batch Tools (5)
+- `mcp__deep-research__batch-fact-extract`
+- `mcp__deep-research__batch-entity-extract`
+- `mcp__deep-research__batch-citation-validate`
+- `mcp__deep-research__batch-source-rate`
+- `mcp__deep-research__batch-conflict-detect`
+
+### State Management Tools (11)
+- `mcp__deep-research__create_research_session`
+- `mcp__deep-research__update_session_status`
+- `mcp__deep-research__get_session_info`
+- `mcp__deep-research__log_activity`
+- `mcp__deep-research__render_progress`
+- `mcp__deep-research__register_agent`
+- `mcp__deep-research__update_agent_status`
+- `mcp__deep-research__get_active_agents`
+- `mcp__deep-research__update_current_phase`
+- `mcp__deep-research__get_current_phase`
+- `mcp__deep-research__checkpoint_phase`
 
 ---
 
@@ -227,6 +280,8 @@ RESEARCH/[topic]/
 │   └── citation_validation.md   # Validation report
 ├── research_notes/
 │   ├── agent_findings_summary.md
+│   ├── refined_question.md
+│   ├── research_plan.md
 │   └── agent_status.json        # Execution metadata
 └── appendices/
     ├── methodology.md
@@ -244,7 +299,7 @@ RESEARCH/[topic]/
 - Budget allows iterative refinement
 
 **How it works**:
-1. research-orchestrator-agent detects complexity
+1. Coordinator detects complexity
 2. Invokes got-agent for path optimization
 3. GoT operations: Generate, Score, Aggregate, Refine, Prune
 4. Continues until quality threshold reached or budget exhausted
@@ -284,31 +339,36 @@ RESEARCH/[topic]/
 |--------|--------|
 | Citation coverage | 100% |
 | Citation completeness | 100% |
-| Citation accuracy | ≥ 95% |
+| Citation accuracy | >= 95% |
 | Source quality average | B or higher |
 | Hallucination count | 0 |
-| Overall quality score | ≥ 8/10 |
+| Overall quality score | >= 8/10 |
 
 ---
 
-## What's Different in v2.0?
+## Architecture Evolution
 
-### v1.0 (Old Architecture)
+### v1.0 (Original)
 - ❌ Monolithic skills with embedded logic
 - ❌ Direct agent deployment from skills
 - ❌ Manual state management
-- ❌ Phase-by-phase execution in skills
-- ❌ Limited error recovery
 
-### v2.0 (Refactored Architecture)
-- ✅ Thin skill wrappers + autonomous agents
+### v2.0 (Refactored)
+- ✅ Thin skill wrappers + orchestrator agent
 - ✅ Orchestrator agent manages all phases
-- ✅ Centralized StateManager (SQLite)
-- ✅ Agent-level autonomy and error recovery
-- ✅ MCP tools for standardized data processing
-- ✅ Optional research planning phase
-- ✅ Enhanced question refinement with validation
-- ✅ Better separation of concerns
+- ✅ Centralized StateManager
+
+### v2.1 (Current - Phase Agent Architecture)
+- ✅ Thin skill wrappers + general-purpose agent with embedded workflow
+- ✅ 7-phase workflow implemented via prompt instructions
+- ✅ Agent definitions in `.claude/agents/` serve as documentation/reference
+- ✅ UnifiedStateManager (SQLite) as single source of truth
+- ✅ TokenBudgetManager for budget enforcement
+- ✅ RecoveryHandler for checkpoint recovery
+- ✅ Enhanced separation of concerns
+- ✅ Uses Claude Code built-in agent types (general-purpose, Explore, etc.)
+
+**IMPORTANT NOTE**: The framework uses Claude Code's built-in `general-purpose` agent type to execute the research workflow. Custom agent types like `coordinator`, `phase-1-refinement`, etc. are NOT actual agent types - they are workflow definitions and documentation stored in `.claude/agents/` for reference.
 
 ---
 
@@ -320,12 +380,12 @@ RESEARCH/[topic]/
 - E003: Execution timeout → Return partial results
 - E004: Quality below threshold → Trigger refinement
 
-**Agent-Level Errors**:
-- Handled autonomously by research-orchestrator-agent
-- Automatic retries and recovery
+**Workflow-Level Errors** (handled by general-purpose agent):
+- Phase failure detection
+- Automatic recovery strategies
 - Quality gate enforcement
-- Fallback strategies
+- Checkpoint-based recovery
 
 ---
 
-**Begin refactored deep research workflow.**
+**Begin Phase Agent deep research workflow.**

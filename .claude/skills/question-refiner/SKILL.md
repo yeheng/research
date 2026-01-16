@@ -1,103 +1,85 @@
 ---
 name: question-refiner
-description: Transform raw research questions into structured, validated research prompts with automatic research type detection and output format validation. Ensures prompts are ready for research-executor with comprehensive quality checks.
+description: 将原始研究问题转换为结构化研究提示，通过渐进式提问确保提示质量达标
+user_invocable: true
 ---
 
 # Question Refiner
 
-## Overview
+## Purpose
 
-Transform vague research questions into structured, actionable research prompts through strategic clarifying questions with automatic research type detection and quality validation.
+薄包装 Skill，负责输入验证并调用 `phase-1-refinement` Agent 完成问题精炼。
 
-## When to Use
+## Input
 
-- User provides a raw, unstructured research question
-- Research scope is unclear or too broad
-- Need validated structured prompt for research-executor
-- Want to ensure prompt meets quality standards (≥8.0)
+**Required**: 原始研究问题（字符串）
 
-## Core Approach
+**Optional**:
+- `research_type`: exploratory | comparative | problem-solving | forecasting | deep-dive | market-analysis
+- `output_format`: comprehensive_report | executive_summary | comparison_table
 
-**Progressive Questioning** (2 rounds max):
-1. **Round 1** (3 questions): Topic focus, output format, audience
-2. **Round 2** (conditional): Scope, sources, special requirements
-3. **Auto-detect** research type → Select template → Generate & validate
+## Execution
 
-## Research Type Detection
+```
+1. 验证输入非空
+2. 调用 Task 工具:
+   - subagent_type: "phase-1-refinement"
+   - prompt: 包含原始问题和可选参数
+3. 返回结构化提示
+```
 
-| Type | Indicators | Example |
-|------|-----------|---------|
-| **Exploratory** | "what is", "overview", "landscape" | "What is the AI market like?" |
-| **Comparative** | "vs", "compare", "difference" | "Compare GPT-4 vs Claude" |
-| **Problem-Solving** | "how to", "solve", "fix" | "How to improve API performance" |
-| **Forecasting** | "future", "trend", "prediction" | "Future of quantum computing" |
-| **Deep Dive** | "technical", "architecture" | "How does BERT work internally" |
-| **Market Analysis** | "market", "industry", "competition" | "AI chip market analysis" |
+## Output
 
-## Output Structure
+结构化研究提示，包含：
 
 ```markdown
 ### RESEARCH TYPE
-[auto-detected type]
+[自动检测的研究类型]
 
 ### TASK
-[Clear, specific research objective]
+[明确的研究目标]
 
 ### CONTEXT/BACKGROUND
-[Why this matters, who will use it]
+[背景信息]
 
 ### SPECIFIC QUESTIONS
-1-7 concrete sub-questions
+[3-7个具体子问题]
 
 ### KEYWORDS
-[Search terms ≥5]
+[≥5个搜索关键词]
 
 ### CONSTRAINTS
-- Timeframe: [e.g., 2020-present]
-- Geography: [e.g., global]
-- Source types: [academic, industry, news]
+- Timeframe: [时间范围]
+- Geography: [地理范围]
+- Source types: [来源类型]
 
 ### OUTPUT FORMAT
-- Type: [comprehensive_report|executive_summary|comparison_table]
-- Citation style: [inline-with-url|footnotes]
+- Type: [输出类型]
+- Citation style: [引用格式]
 
 ### QUALITY SCORE
-[0-10, must be ≥8.0]
+[0-10，必须≥8.0]
 ```
 
-## Quality Validation
+## Error Codes
 
-| Component | Weight | Criteria |
-|-----------|--------|----------|
-| Completeness | 30% | All required fields present |
-| Specificity | 30% | Questions are specific, not vague |
-| Keyword Richness | 20% | ≥5 search terms with synonyms |
-| Constraint Clarity | 20% | Clear, realistic constraints |
+| Code | Description | Action |
+|------|-------------|--------|
+| E001 | 输入为空 | 请求提供研究问题 |
+| E003 | 验证失败 | 重试精炼 |
+| E004 | 质量<8.0 | 请求人工审核 |
 
-**Process**: Generate → Validate → If score < 8.0: Refine (max 2 attempts)
+## Example
 
-## Token Optimization
+```
+User: /question-refiner AI芯片市场分析
 
-> 📋 **Reference**: `.claude/shared/constants/token_optimization.md`
-
-**Context Budget**: 10k tokens max
-
-## Error Handling
-
-> 📋 **Reference**: `.claude/shared/constants/error_codes.md`
-
-- **E001**: Insufficient context → Ask clarifying questions
-- **E003**: Validation failed → Refine and retry
-- **E004**: Quality < 8.0 after retries → Request manual review
+Skill:
+1. 验证输入有效
+2. 调用 phase-1-refinement agent
+3. 返回结构化提示（质量≥8.0）
+```
 
 ---
 
-**See also**: [Skill Base Template](../../shared/templates/skill_base_template.md)
-
-## Examples
-
-See [examples.md](./examples.md) for detailed interaction patterns.
-
-## Detailed Instructions
-
-See [instructions.md](./instructions.md) for complete questioning strategy.
+**Agent**: `phase-1-refinement` 处理渐进式提问和质量验证

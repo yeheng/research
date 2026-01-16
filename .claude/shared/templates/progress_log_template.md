@@ -40,7 +40,7 @@ RESEARCH/[topic]/progress.md
 - **Estimated Time**: XX minutes
 
 ### [timestamp] Phase 1-7: Research Execution
-- **Agent**: research-orchestrator-agent
+- **Agent**: general-purpose (with embedded coordinator workflow)
 - **Status**: 🔄 Running
 
 #### Agent Deployments

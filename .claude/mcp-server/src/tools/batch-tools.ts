@@ -1,7 +1,8 @@
 /**
- * Batch Processing Tools
+ * Batch Processing Tools v2
  *
- * Provides batch processing endpoints for all MCP tools
+ * Provides batch processing endpoints for unified MCP tools.
+ * Supports both new unified API and legacy aliases.
  */
 
 import { logger } from '../utils/logger.js';
@@ -9,15 +10,14 @@ import { ValidationError } from '../utils/errors.js';
 import { processBatch, createBatchItems, BatchResult } from '../utils/batch.js';
 import { CacheManager, factCache, entityCache, citationCache, sourceRatingCache, conflictCache } from '../cache/cache-manager.js';
 
-// Import individual tool functions
-import { factExtract } from './fact-extract.js';
-import { entityExtract } from './entity-extract.js';
-import { citationValidate } from './citation-validate.js';
-import { sourceRate } from './source-rate.js';
+// Import unified tools
+import { extract, factExtract, entityExtract } from './extract.js';
+import { validate, citationValidate, sourceRate } from './validate.js';
 import { conflictDetect } from './conflict-detect.js';
 
 interface BatchInput {
   items: any[];
+  mode?: 'fact' | 'entity' | 'all' | 'citation' | 'source';  // For unified batch tools
   options?: {
     maxConcurrency?: number;
     useCache?: boolean;
@@ -25,11 +25,114 @@ interface BatchInput {
   };
 }
 
+// === Unified Batch Tools ===
+
+/**
+ * Unified batch extract tool
+ * Supports mode: 'fact' | 'entity' | 'all'
+ */
+export async function batchExtract(input: BatchInput): Promise<any> {
+  const mode = input.mode || 'all';
+  logger.info('Starting batch extraction', { itemCount: input.items?.length, mode });
+
+  if (!input.items || !Array.isArray(input.items)) {
+    throw new ValidationError('Items array is required');
+  }
+
+  const useCache = input.options?.useCache ?? true;
+  const batchItems = createBatchItems(input.items);
+
+  // Select cache based on mode
+  const cache = mode === 'fact' ? factCache :
+                mode === 'entity' ? entityCache :
+                factCache;  // Use factCache for 'all' mode
+
+  const processor = async (item: any) => {
+    const inputWithMode = { ...item, mode };
+    if (useCache) {
+      const cacheKey = CacheManager.generateKey({ ...item, mode });
+      return cache.getOrCompute(cacheKey, async () => {
+        const result = await extract(inputWithMode);
+        return JSON.parse(result.content[0].text);
+      });
+    }
+    const result = await extract(inputWithMode);
+    return JSON.parse(result.content[0].text);
+  };
+
+  const { results, summary } = await processBatch(batchItems, processor, {
+    maxConcurrency: input.options?.maxConcurrency ?? 5,
+    stopOnError: input.options?.stopOnError ?? false,
+  });
+
+  return formatBatchResponse(`batch-extract(mode=${mode})`, results, summary, cache);
+}
+
+/**
+ * Unified batch validate tool
+ * Supports mode: 'citation' | 'source' | 'all'
+ */
+export async function batchValidate(input: BatchInput): Promise<any> {
+  const mode = input.mode || 'all';
+  logger.info('Starting batch validation', { itemCount: input.items?.length, mode });
+
+  if (!input.items || !Array.isArray(input.items)) {
+    throw new ValidationError('Items array is required');
+  }
+
+  const useCache = input.options?.useCache ?? true;
+  const batchItems = createBatchItems(input.items);
+
+  // Select cache based on mode
+  const cache = mode === 'citation' ? citationCache :
+                mode === 'source' ? sourceRatingCache :
+                citationCache;  // Use citationCache for 'all' mode
+
+  const processor = async (item: any) => {
+    // Transform item based on mode
+    let inputWithMode: any;
+    if (mode === 'source') {
+      inputWithMode = {
+        mode,
+        source_url: item.source_url || item.url || item,
+        source_type: item.source_type,
+      };
+    } else if (mode === 'citation') {
+      inputWithMode = {
+        mode,
+        citations: Array.isArray(item.citations) ? item.citations : [item],
+      };
+    } else {
+      inputWithMode = { ...item, mode };
+    }
+
+    if (useCache) {
+      const cacheKey = CacheManager.generateKey({ ...item, mode });
+      return cache.getOrCompute(cacheKey, async () => {
+        const result = await validate(inputWithMode);
+        return JSON.parse(result.content[0].text);
+      });
+    }
+    const result = await validate(inputWithMode);
+    return JSON.parse(result.content[0].text);
+  };
+
+  const { results, summary } = await processBatch(batchItems, processor, {
+    maxConcurrency: input.options?.maxConcurrency ?? 5,
+    stopOnError: input.options?.stopOnError ?? false,
+  });
+
+  return formatBatchResponse(`batch-validate(mode=${mode})`, results, summary, cache);
+}
+
+// === Legacy Batch Tools (aliases) ===
+
 /**
  * Batch fact extraction
+ * @deprecated Use batchExtract({ mode: 'fact', ... }) instead
  */
 export async function batchFactExtract(input: BatchInput): Promise<any> {
-  logger.info('Starting batch fact extraction', { itemCount: input.items?.length });
+  logger.info('Starting batch fact extraction (legacy)', { itemCount: input.items?.length });
 
   if (!input.items || !Array.isArray(input.items)) {
     throw new ValidationError('Items array is required');
@@ -60,9 +163,10 @@ export async function batchFactExtract(input: BatchInput): Promise<any> {
 
 /**
  * Batch entity extraction
+ * @deprecated Use batchExtract({ mode: 'entity', ... }) instead
  */
 export async function batchEntityExtract(input: BatchInput): Promise<any> {
-  logger.info('Starting batch entity extraction', { itemCount: input.items?.length });
+  logger.info('Starting batch entity extraction (legacy)', { itemCount: input.items?.length });
 
   if (!input.items || !Array.isArray(input.items)) {
     throw new ValidationError('Items array is required');
@@ -93,9 +197,10 @@ export async function batchEntityExtract(input: BatchInput): Promise<any> {
 
 /**
  * Batch citation validation
+ * @deprecated Use batchValidate({ mode: 'citation', ... }) instead
  */
 export async function batchCitationValidate(input: BatchInput): Promise<any> {
-  logger.info('Starting batch citation validation', { itemCount: input.items?.length });
+  logger.info('Starting batch citation validation (legacy)', { itemCount: input.items?.length });
 
   if (!input.items || !Array.isArray(input.items)) {
     throw new ValidationError('Items array is required');
@@ -126,9 +231,10 @@ export async function batchCitationValidate(input: BatchInput): Promise<any> {
 
 /**
  * Batch source rating
+ * @deprecated Use batchValidate({ mode: 'source', ... }) instead
  */
 export async function batchSourceRate(input: BatchInput): Promise<any> {
-  logger.info('Starting batch source rating', { itemCount: input.items?.length });
+  logger.info('Starting batch source rating (legacy)', { itemCount: input.items?.length });
 
   if (!input.items || !Array.isArray(input.items)) {
     throw new ValidationError('Items array is required');
@@ -190,6 +296,8 @@ export async function batchConflictDetect(input: BatchInput): Promise<any> {
   return formatBatchResponse('batch-conflict-detect', results, summary, conflictCache);
 }
 
+// === Cache Management ===
+
 /**
  * Get cache statistics for all caches
  */
@@ -233,6 +341,8 @@ export async function clearAllCaches(): Promise<any> {
     ],
   };
 }
+
+// === Utilities ===
 
 /**
  * Format batch response

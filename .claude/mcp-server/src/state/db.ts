@@ -51,17 +51,28 @@ export function getDB(): Database.Database {
  * Reads schema.sql and executes it (idempotent)
  */
 export function initializeSchema(): void {
-  const schemaPath = path.join(STATE_DIR, 'schema.sql');
+  // Try multiple paths for schema.sql
+  const possiblePaths = [
+    path.join('/Users/yeheng/workspaces/research/template/.claude/mcp-server/state/', 'schema.sql')
+  ];
 
-  if (!fs.existsSync(schemaPath)) {
-    console.warn('⚠️  schema.sql not found, skipping initialization');
+  let schemaPath: string | null = null;
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      schemaPath = p;
+      break;
+    }
+  }
+
+  if (!schemaPath) {
+    console.warn('⚠️  schema.sql not found in any location, skipping initialization');
     return;
   }
 
   const schema = fs.readFileSync(schemaPath, 'utf-8');
   db.exec(schema);
 
-  console.log('✅ Database schema initialized');
+  console.log('✅ Database schema initialized from:', schemaPath);
 }
 
 // Auto-initialize on module load

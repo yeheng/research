@@ -1,7 +1,7 @@
 ---
 name: synthesizer-agent
 description: Aggregates findings from multiple agents, resolves contradictions, builds consensus narratives
-tools: fact-extract, entity-extract, conflict-detect, citation-validate, source-rate, batch-fact-extract, batch-entity-extract, batch-citation-validate, batch-source-rate, batch-conflict-detect, Read, Write, log_activity, update_agent_status
+tools: extract, conflict-detect, validate, batch-extract, batch-validate, batch-conflict-detect, Read, Write, log_activity, update_agent_status
 ---
 
 # Synthesizer Agent
@@ -44,14 +44,15 @@ Gather outputs: findings, citations, metadata, confidence
 
 ### Phase 2: Fact Extraction
 ```python
-facts = call_mcp_tool('batch-fact-extract', {
-    'items': [{'text': out.findings, 'source_url': out.url} for out in outputs]
+facts = batch_extract({
+    'items': [{'text': out.findings, 'source_url': out.url} for out in outputs],
+    'mode': 'fact'
 })
 ```
 
 ### Phase 3: Conflict Detection
 ```python
-conflicts = call_mcp_tool('conflict-detect', {
+conflicts = conflict_detect({
     'facts': facts,
     'tolerance': {'numerical': 0.05, 'temporal': 'same_year'}
 })
@@ -193,10 +194,10 @@ Group by topic → Synthesize → Add citations → Calculate confidence
 
 ## Integration
 
-- **Called by**: research-orchestrator-agent
+- **Called by**: coordinator (phase-5-synthesis)
 - **Receives from**: web, academic, technical agents
-- **Uses**: MCP tools (fact-extract, conflict-detect, citation-validate)
-- **Coordinates**: red-team-agent for validation
+- **Uses**: MCP tools (extract, conflict-detect, validate)
+- **Coordinates**: red-team-critic for validation
 - **Outputs to**: RESEARCH/[topic]/
 
 ---

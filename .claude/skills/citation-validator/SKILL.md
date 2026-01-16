@@ -1,94 +1,83 @@
 ---
 name: citation-validator
-description: 验证研究报告中所有声明的引用准确性、来源质量和格式规范性。确保每个事实性声明都有可验证的来源，并提供来源质量评级。当最终确定研究报告、审查他人研究、发布或分享研究之前使用此技能。
+description: 验证研究报告中所有声明的引用准确性、来源质量和格式规范性
+user_invocable: true
 ---
 
 # Citation Validator
 
-## Overview
+## Purpose
 
-Ensure research integrity by verifying every factual claim has accurate, complete, and high-quality citations.
+薄包装 Skill，验证输入并调用 `phase-6-validation` Agent 完成引用验证。
 
-## When to Use
+## Input
 
-- Before finalizing research reports
-- Reviewing research from other agents
-- Before publishing or sharing research
-- Quality assurance checkpoint
+**Required**: 研究报告文件路径或内容
 
-## Core Responsibilities
+**Optional**:
+- `quality_threshold`: 8.0 (默认)
+- `max_claims`: 200 (最大验证声明数)
+- `check_urls`: true (是否验证URL可访问性)
 
-1. **Verify Citation Presence**: Every factual claim must have citation
-2. **Validate Completeness**: Author, date, title, URL/DOI, pages
-3. **Assess Source Quality**: A-E rating system
-4. **Check Accuracy**: Citations actually support claims
-5. **Detect Hallucinations**: Identify unsupported claims
-6. **Format Consistency**: Uniform citation style
+## Execution
+
+```text
+1. 验证输入文件存在或内容非空
+2. 调用 Task 工具:
+   - subagent_type: "phase-6-validation"
+   - prompt: 文件路径/内容 + 验证参数
+3. 返回验证报告
+```
 
 ## Source Quality Ratings
 
-> 📋 **Reference**: See `.claude/shared/constants/source_quality_ratings.md` for full details.
+- **A**: 同行评审、系统综述、荟萃分析
+- **B**: 队列研究、临床指南、权威分析师
+- **C**: 专家意见、案例报告、白皮书
+- **D**: 预印本、会议摘要、博客
+- **E**: 匿名、有偏见、过时、链接失效
 
-- **A**: Peer-reviewed RCTs, systematic reviews, meta-analyses
-- **B**: Cohort studies, clinical guidelines, reputable analysts
-- **C**: Expert opinion, case reports, company white papers
-- **D**: Preprints, conference abstracts, blogs
-- **E**: Anonymous, biased, outdated, broken links
+## Output
 
-## Safety Limits
+```markdown
+# Citation Validation Report
 
-- **Max claims to validate**: 200 per session
-- **Timeout per URL check**: 5 seconds (reduced from 10s)
-- **Max parallel URL checks**: 5
-- **Cache validated URLs**: 7 days TTL
+## Summary
+- Total claims: X
+- Validated: X
+- Quality score: X/10
 
-## Token Optimization
+## Issues Found
+| Claim | Issue | Severity |
+|-------|-------|----------|
 
-> 📋 **Reference**: `.claude/shared/constants/token_optimization.md`
+## Source Quality Distribution
+| Rating | Count |
+|--------|-------|
 
-**Batch Validation**: Process 20 citations at a time
+## Recommendations
+[改进建议]
+```
 
-**URL Checking**: Cache results for 7 days in `data/citation_cache.json`
+## Error Codes
 
-**Skip Re-validation**: If URL checked within 24 hours
+| Code | Description | Action |
+|------|-------------|--------|
+| E001 | 文件不存在 | 请求有效路径 |
+| E102 | URL不可访问 | 搜索存档版本 |
+| E401 | 检测到幻觉 | 移除或补充引用 |
 
-**Context Budget**: 30k tokens max
+## Example
 
-## Error Handling
+```text
+User: /citation-validator RESEARCH/topic/full_report.md
 
-> 📋 **Reference**: `.claude/shared/constants/error_codes.md`
+Skill:
+1. 验证文件存在
+2. 调用 phase-6-validation agent
+3. 返回验证报告（质量评分）
+```
 
-**Common Errors**:
-- **E102**: URL not accessible (404) → Search for archived version
-- **E401**: Hallucination detected → Remove claim or find citation (penalty: -2 points)
-- **E402**: Source quality too low → Search for higher-quality sources
+---
 
-**Hallucination Penalty**: -2 points per occurrence (reduced from -5)
-
-## Validation Process
-
-1. **Claim Detection**: Identify all factual claims
-2. **Citation Presence**: Check each claim has citation
-3. **Completeness Check**: Verify all required elements
-4. **Quality Assessment**: Assign A-E rating
-5. **Accuracy Verification**: Use WebSearch/WebFetch to verify
-6. **Hallucination Detection**: Flag unsupported claims
-7. **Chain-of-Verification**: Extra scrutiny for critical claims
-
-## Quality Score
-
-**Target**: ≥ 8/10
-
-- Citation coverage (0-3 pts)
-- Completeness (0-2 pts)
-- Accuracy (0-3 pts)
-- Source quality (0-2 pts)
-- Hallucination penalty (-5 pts each)
-
-## Examples
-
-See [examples.md](./examples.md) for validation scenarios.
-
-## Detailed Instructions
-
-See [instructions.md](./instructions.md) for complete validation methodology.
+**Agent**: `phase-6-validation` 处理引用验证和红队审查

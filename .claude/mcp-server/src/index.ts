@@ -1,25 +1,33 @@
 #!/usr/bin/env node
 
 /**
- * Deep Research Framework - MCP Server
+ * Deep Research Framework - MCP Server v2.1
  *
- * Provides standardized data processing tools for research:
- * - fact-extract: Extract atomic facts from text
- * - entity-extract: Extract entities and relationships
- * - citation-validate: Validate citations
- * - source-rate: Rate source quality
+ * Simplified tool structure with unified APIs and backward compatibility.
+ *
+ * NEW Unified Tools (6):
+ * - extract: Unified fact + entity extraction (mode: 'fact' | 'entity' | 'all')
+ * - validate: Unified citation + source validation (mode: 'citation' | 'source' | 'all')
  * - conflict-detect: Detect fact conflicts
+ * - batch-extract: Batch extraction with mode support
+ * - batch-validate: Batch validation with mode support
+ * - batch-conflict-detect: Batch conflict detection
  *
- * Batch processing tools (Phase 3B):
- * - batch-fact-extract: Process multiple texts in parallel
- * - batch-entity-extract: Extract from multiple texts
- * - batch-citation-validate: Validate multiple citations
- * - batch-source-rate: Rate multiple sources
- * - batch-conflict-detect: Detect conflicts in batches
+ * Legacy Aliases (maintained for backward compatibility):
+ * - fact-extract → extract({ mode: 'fact' })
+ * - entity-extract → extract({ mode: 'entity' })
+ * - citation-validate → validate({ mode: 'citation' })
+ * - source-rate → validate({ mode: 'source' })
+ * - batch-fact-extract, batch-entity-extract, etc.
  *
- * Cache management:
- * - cache-stats: Get cache statistics
- * - cache-clear: Clear all caches
+ * State Management (9 tools):
+ * - create_research_session, update_session_status, get_session_info
+ * - register_agent, update_agent_status, get_active_agents
+ * - update_current_phase, get_current_phase, checkpoint_phase
+ *
+ * Logging & Utils (4 tools):
+ * - log_activity, render_progress
+ * - cache-stats, cache-clear
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -29,15 +37,15 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
-// Tool implementations
-import { factExtract } from './tools/fact-extract.js';
-import { entityExtract } from './tools/entity-extract.js';
-import { citationValidate } from './tools/citation-validate.js';
-import { sourceRate } from './tools/source-rate.js';
+// Unified tools
+import { extract, factExtract, entityExtract } from './tools/extract.js';
+import { validate, citationValidate, sourceRate } from './tools/validate.js';
 import { conflictDetect } from './tools/conflict-detect.js';
 
 // Batch tools
 import {
+  batchExtract,
+  batchValidate,
   batchFactExtract,
   batchEntityExtract,
   batchCitationValidate,
@@ -79,7 +87,7 @@ import { renderingTools, renderProgressHandler } from './tools/progress-renderer
 const server = new Server(
   {
     name: 'deep-research-mcp-server',
-    version: '2.0.0',
+    version: '2.1.0',
   },
   {
     capabilities: {
@@ -95,6 +103,10 @@ const batchInputSchema = {
     items: {
       type: 'array',
       description: 'Array of items to process',
+    },
+    mode: {
+      type: 'string',
+      description: 'Processing mode (depends on tool)',
     },
     options: {
       type: 'object',
@@ -121,65 +133,52 @@ const batchInputSchema = {
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
-      // === Core Tools ===
+      // === NEW Unified Tools ===
       {
-        name: 'fact-extract',
-        description: 'Extract atomic facts from text with source attribution',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            text: { type: 'string', description: 'Raw research content' },
-            source_url: { type: 'string', description: 'Source URL' },
-            source_metadata: { type: 'object', description: 'Source metadata' },
-          },
-          required: ['text'],
-        },
-      },
-      {
-        name: 'entity-extract',
-        description: 'Extract named entities and relationships from text',
+        name: 'extract',
+        description: 'Unified extraction tool for facts and entities. Mode: "fact" for atomic facts, "entity" for named entities, "all" for both.',
         inputSchema: {
           type: 'object',
           properties: {
             text: { type: 'string', description: 'Text to analyze' },
+            mode: {
+              type: 'string',
+              enum: ['fact', 'entity', 'all'],
+              description: 'Extraction mode (default: all)',
+            },
+            source_url: { type: 'string', description: 'Source URL for facts' },
+            source_metadata: { type: 'object', description: 'Source metadata' },
             entity_types: {
               type: 'array',
               items: { type: 'string' },
-              description: 'Entity types to extract'
+              description: 'Entity types to extract',
             },
-            extract_relations: { type: 'boolean', description: 'Extract relationships' },
+            extract_relations: { type: 'boolean', description: 'Extract relationships (default: true)' },
           },
           required: ['text'],
         },
       },
       {
-        name: 'citation-validate',
-        description: 'Validate citations for completeness, accuracy, and quality',
+        name: 'validate',
+        description: 'Unified validation tool for citations and sources. Mode: "citation" for completeness check, "source" for quality rating, "all" for both.',
         inputSchema: {
           type: 'object',
           properties: {
+            mode: {
+              type: 'string',
+              enum: ['citation', 'source', 'all'],
+              description: 'Validation mode (default: all)',
+            },
             citations: { type: 'array', description: 'Array of citations to validate' },
-            verify_urls: { type: 'boolean', description: 'Check URL accessibility' },
-            check_accuracy: { type: 'boolean', description: 'Verify citation accuracy' },
-          },
-          required: ['citations'],
-        },
-      },
-      {
-        name: 'source-rate',
-        description: 'Rate source quality on A-E scale',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            source_url: { type: 'string', description: 'Source URL' },
+            source_url: { type: 'string', description: 'Source URL to rate' },
             source_type: {
               type: 'string',
               enum: ['academic', 'industry', 'news', 'blog', 'official'],
-              description: 'Type of source'
+              description: 'Type of source',
             },
-            metadata: { type: 'object', description: 'Source metadata' },
+            verify_urls: { type: 'boolean', description: 'Check URL accessibility' },
+            check_accuracy: { type: 'boolean', description: 'Verify citation accuracy' },
           },
-          required: ['source_url'],
         },
       },
       {
@@ -194,30 +193,122 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['facts'],
         },
       },
-      // === Batch Processing Tools ===
+      // === NEW Unified Batch Tools ===
       {
-        name: 'batch-fact-extract',
-        description: 'Process multiple texts for fact extraction in parallel with caching',
-        inputSchema: batchInputSchema,
+        name: 'batch-extract',
+        description: 'Batch extraction with mode support. Mode: "fact", "entity", or "all".',
+        inputSchema: {
+          ...batchInputSchema,
+          properties: {
+            ...batchInputSchema.properties,
+            mode: {
+              type: 'string',
+              enum: ['fact', 'entity', 'all'],
+              description: 'Extraction mode (default: all)',
+            },
+          },
+        },
       },
       {
-        name: 'batch-entity-extract',
-        description: 'Extract entities from multiple texts in parallel with caching',
-        inputSchema: batchInputSchema,
-      },
-      {
-        name: 'batch-citation-validate',
-        description: 'Validate multiple citations in parallel with caching',
-        inputSchema: batchInputSchema,
-      },
-      {
-        name: 'batch-source-rate',
-        description: 'Rate multiple sources in parallel with caching',
-        inputSchema: batchInputSchema,
+        name: 'batch-validate',
+        description: 'Batch validation with mode support. Mode: "citation", "source", or "all".',
+        inputSchema: {
+          ...batchInputSchema,
+          properties: {
+            ...batchInputSchema.properties,
+            mode: {
+              type: 'string',
+              enum: ['citation', 'source', 'all'],
+              description: 'Validation mode (default: all)',
+            },
+          },
+        },
       },
       {
         name: 'batch-conflict-detect',
         description: 'Detect conflicts in multiple fact sets in parallel',
+        inputSchema: batchInputSchema,
+      },
+      // === Legacy Tools (Aliases - maintained for backward compatibility) ===
+      {
+        name: 'fact-extract',
+        description: '[LEGACY] Extract atomic facts from text. Use extract({ mode: "fact" }) instead.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            text: { type: 'string', description: 'Raw research content' },
+            source_url: { type: 'string', description: 'Source URL' },
+            source_metadata: { type: 'object', description: 'Source metadata' },
+          },
+          required: ['text'],
+        },
+      },
+      {
+        name: 'entity-extract',
+        description: '[LEGACY] Extract named entities. Use extract({ mode: "entity" }) instead.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            text: { type: 'string', description: 'Text to analyze' },
+            entity_types: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Entity types to extract',
+            },
+            extract_relations: { type: 'boolean', description: 'Extract relationships' },
+          },
+          required: ['text'],
+        },
+      },
+      {
+        name: 'citation-validate',
+        description: '[LEGACY] Validate citations. Use validate({ mode: "citation" }) instead.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            citations: { type: 'array', description: 'Array of citations to validate' },
+            verify_urls: { type: 'boolean', description: 'Check URL accessibility' },
+            check_accuracy: { type: 'boolean', description: 'Verify citation accuracy' },
+          },
+          required: ['citations'],
+        },
+      },
+      {
+        name: 'source-rate',
+        description: '[LEGACY] Rate source quality. Use validate({ mode: "source" }) instead.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            source_url: { type: 'string', description: 'Source URL' },
+            source_type: {
+              type: 'string',
+              enum: ['academic', 'industry', 'news', 'blog', 'official'],
+              description: 'Type of source',
+            },
+            metadata: { type: 'object', description: 'Source metadata' },
+          },
+          required: ['source_url'],
+        },
+      },
+      // === Legacy Batch Tools ===
+      {
+        name: 'batch-fact-extract',
+        description: '[LEGACY] Process multiple texts for fact extraction. Use batch-extract({ mode: "fact" }) instead.',
+        inputSchema: batchInputSchema,
+      },
+      {
+        name: 'batch-entity-extract',
+        description: '[LEGACY] Extract entities from multiple texts. Use batch-extract({ mode: "entity" }) instead.',
+        inputSchema: batchInputSchema,
+      },
+      {
+        name: 'batch-citation-validate',
+        description: '[LEGACY] Validate multiple citations. Use batch-validate({ mode: "citation" }) instead.',
+        inputSchema: batchInputSchema,
+      },
+      {
+        name: 'batch-source-rate',
+        description: '[LEGACY] Rate multiple sources. Use batch-validate({ mode: "source" }) instead.',
         inputSchema: batchInputSchema,
       },
       // === State Management Tools ===
@@ -254,7 +345,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
-      // Core tools
+      // === NEW Unified Tools ===
+      case 'extract':
+        return await extract(args as any);
+
+      case 'validate':
+        return await validate(args as any);
+
+      case 'conflict-detect':
+        return await conflictDetect(args as any);
+
+      // === NEW Unified Batch Tools ===
+      case 'batch-extract':
+        return await batchExtract(args as any);
+
+      case 'batch-validate':
+        return await batchValidate(args as any);
+
+      case 'batch-conflict-detect':
+        return await batchConflictDetect(args as any);
+
+      // === Legacy Tools (Aliases) ===
       case 'fact-extract':
         return await factExtract(args as any);
 
@@ -267,10 +378,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'source-rate':
         return await sourceRate(args as any);
 
-      case 'conflict-detect':
-        return await conflictDetect(args as any);
-
-      // Batch tools
+      // === Legacy Batch Tools ===
       case 'batch-fact-extract':
         return await batchFactExtract(args as any);
 
@@ -283,69 +391,66 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'batch-source-rate':
         return await batchSourceRate(args as any);
 
-      case 'batch-conflict-detect':
-        return await batchConflictDetect(args as any);
-
-      // State management tools
+      // === State Management Tools ===
       case 'create_research_session':
         return {
-          content: [{ type: 'text', text: JSON.stringify(createSessionHandler(args), null, 2) }]
+          content: [{ type: 'text', text: JSON.stringify(createSessionHandler(args), null, 2) }],
         };
 
       case 'update_session_status':
         return {
-          content: [{ type: 'text', text: JSON.stringify(updateSessionStatusHandler(args), null, 2) }]
+          content: [{ type: 'text', text: JSON.stringify(updateSessionStatusHandler(args), null, 2) }],
         };
 
       case 'get_session_info':
         return {
-          content: [{ type: 'text', text: JSON.stringify(getSessionInfoHandler(args), null, 2) }]
+          content: [{ type: 'text', text: JSON.stringify(getSessionInfoHandler(args), null, 2) }],
         };
 
-      // Agent management tools
+      // === Agent Management Tools ===
       case 'register_agent':
         return {
-          content: [{ type: 'text', text: JSON.stringify(registerAgentHandler(args), null, 2) }]
+          content: [{ type: 'text', text: JSON.stringify(registerAgentHandler(args), null, 2) }],
         };
 
       case 'update_agent_status':
         return {
-          content: [{ type: 'text', text: JSON.stringify(updateAgentStatusHandler(args), null, 2) }]
+          content: [{ type: 'text', text: JSON.stringify(updateAgentStatusHandler(args), null, 2) }],
         };
 
       case 'get_active_agents':
         return {
-          content: [{ type: 'text', text: JSON.stringify(getActiveAgentsHandler(args), null, 2) }]
+          content: [{ type: 'text', text: JSON.stringify(getActiveAgentsHandler(args), null, 2) }],
         };
 
-      // Phase tracking tools
+      // === Phase Tracking Tools ===
       case 'update_current_phase':
         return {
-          content: [{ type: 'text', text: JSON.stringify(updateCurrentPhaseHandler(args), null, 2) }]
+          content: [{ type: 'text', text: JSON.stringify(updateCurrentPhaseHandler(args), null, 2) }],
         };
 
       case 'get_current_phase':
         return {
-          content: [{ type: 'text', text: JSON.stringify(getCurrentPhaseHandler(args), null, 2) }]
+          content: [{ type: 'text', text: JSON.stringify(getCurrentPhaseHandler(args), null, 2) }],
         };
 
       case 'checkpoint_phase':
         return {
-          content: [{ type: 'text', text: JSON.stringify(checkpointPhaseHandler(args), null, 2) }]
+          content: [{ type: 'text', text: JSON.stringify(checkpointPhaseHandler(args), null, 2) }],
         };
 
-      // Logging tools
+      // === Logging Tools ===
       case 'log_activity':
         return {
-          content: [{ type: 'text', text: JSON.stringify(await logActivityHandler(args), null, 2) }]
+          content: [{ type: 'text', text: JSON.stringify(await logActivityHandler(args), null, 2) }],
         };
 
       case 'render_progress':
         return {
-          content: [{ type: 'text', text: JSON.stringify(renderProgressHandler(args), null, 2) }]
+          content: [{ type: 'text', text: JSON.stringify(renderProgressHandler(args), null, 2) }],
         };
 
-      // Cache management
+      // === Cache Management ===
       case 'cache-stats':
         return await getCacheStats();
 
@@ -373,7 +478,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('Deep Research MCP Server v2.0.0 running on stdio');
+  console.error('Deep Research MCP Server v2.1.0 running on stdio');
+  console.error('Tools: 6 unified + 10 legacy aliases + 9 state + 4 utils = 29 registered (12 unique)');
 }
 
 main().catch((error) => {

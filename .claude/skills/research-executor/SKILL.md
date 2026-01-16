@@ -1,144 +1,79 @@
 ---
 name: research-executor
-description: Execute complete 7-phase deep research workflow by delegating to the research-orchestrator-agent. Thin wrapper skill that ensures proper agent invocation with structured research prompts.
+description: 执行完整7阶段深度研究流程，使用general-purpose agent嵌入coordinator工作流
+user_invocable: true
 ---
 
 # Research Executor
 
-## Overview
+## Purpose
 
-The Research Executor is a **thin wrapper skill** that delegates research execution to the `research-orchestrator-agent`. It validates inputs, prepares the execution context, and invokes the autonomous orchestrator agent to handle the complete 7-phase deep research workflow.
+薄包装 Skill，验证输入并调用 `general-purpose` Agent 执行完整研究流程（嵌入 coordinator 工作流指令）。
 
-## When to Use
+## Input
 
-- User provides a structured research prompt (from question-refiner)
-- Need to execute systematic research with multiple agents
-- Require comprehensive report with verified citations
-- Research involves 3+ subtopics requiring parallel investigation
+**Required**: 结构化研究提示（来自 question-refiner）
 
-## Core Responsibilities
-
-1. **Input Validation**: Verify structured prompt completeness
-2. **Agent Invocation**: Deploy research-orchestrator-agent with proper context
-3. **Progress Monitoring**: Track agent execution and report status
-4. **Result Delivery**: Return final research package to user
-
-## Architecture (Post-Refactoring)
-
-```
-User Request
-     ↓
-research-executor skill (this skill - thin wrapper)
-     ↓
-research-orchestrator-agent (autonomous agent)
-     ↓
-├── Phase 1: Question Refinement
-├── Phase 2: Research Planning
-├── Phase 3: Multi-Agent Deployment
-├── Phase 4: Source Triangulation
-├── Phase 5: Knowledge Synthesis
-├── Phase 6: Quality Assurance
-└── Phase 7: Output Generation
-```
-
-**Key Change**: All orchestration logic has been moved to `research-orchestrator-agent`. This skill only handles:
-- Input validation
-- Agent deployment
-- Error handling at skill level
-
-## Quick Start
-
-```markdown
-Execute research using structured prompt:
-[STRUCTURED_PROMPT]
-
-The executor will:
-1. Validate prompt structure
-2. Invoke research-orchestrator-agent
-3. Monitor progress
-4. Return results from RESEARCH/[topic]/
-```
-
-## Input Requirements
-
-**Required**: Structured research prompt with:
-- **TASK**: Clear research objective
-- **CONTEXT**: Background and significance
-- **SPECIFIC_QUESTIONS**: 3-7 concrete sub-questions
-- **KEYWORDS**: Search terms
-- **CONSTRAINTS**: Timeframe, geography, sources
-- **OUTPUT_FORMAT**: Deliverable specifications
+必需字段：
+- TASK: 研究目标
+- CONTEXT: 背景信息
+- SPECIFIC_QUESTIONS: 子问题列表 (3-7项)
+- KEYWORDS: 搜索关键词 (≥5项)
+- CONSTRAINTS: 约束条件
+- OUTPUT_FORMAT: 输出格式
 
 **Optional**:
-- Research type (deep/quick/custom)
-- Quality threshold (default: 8.0)
-- Max agents (default: 8)
-- Token budget per agent (default: 15k)
+- `research_type`: deep | quick | custom
+- `quality_threshold`: 8.0 (默认)
+- `max_agents`: 8 (默认)
 
-## Output Structure
+## Execution
 
+```text
+1. 验证结构化提示完整性
+2. 创建输出目录: RESEARCH/[topic]/
+3. 调用 Task 工具:
+   - subagent_type: "general-purpose"
+   - prompt: 验证后的结构化提示 + coordinator agent instructions
+4. 返回输出目录路径
 ```
+
+**IMPORTANT**: Use `general-purpose` as the subagent_type (NOT `coordinator` which doesn't exist).
+Embed the coordinator agent's workflow instructions directly in the prompt.
+
+## Output
+
+返回路径: `RESEARCH/[topic]/`
+
+```text
 RESEARCH/[topic]/
 ├── README.md
 ├── executive_summary.md
 ├── full_report.md
-├── data/
-│   ├── statistics.md
-│   └── ontology/
-├── sources/
-│   ├── bibliography.md
-│   └── source_quality_table.md
-├── research_notes/
-│   └── agent_findings_summary.md
+├── sources/bibliography.md
 └── appendices/
-    ├── methodology.md
-    └── limitations.md
 ```
 
-## Error Handling
+## Error Codes
 
-| Error Code | Description | Action |
-|------------|-------------|--------|
-| **E001** | Incomplete structured prompt | Request missing fields |
-| **E002** | Agent deployment failed | Retry with fallback config |
-| **E003** | Agent execution timeout | Report partial results |
-| **E004** | Quality threshold not met | Trigger refinement (max 2 attempts) |
+| Code | Description | Action |
+|------|-------------|--------|
+| E001 | 提示不完整 | 请求缺失字段 |
+| E002 | Agent 失败 | 重试 |
+| E003 | 超时 | 报告部分结果 |
+| E004 | 质量不达标 | 请求精炼 |
 
-## Safety Limits
+## Example
 
-| Limit | Value | Enforced By |
-|-------|-------|-------------|
-| Max parallel agents | 8 | research-orchestrator-agent |
-| Max research time | 90 minutes | research-orchestrator-agent |
-| Min quality score | 8.0 | research-orchestrator-agent |
-| Max token per agent | 15,000 | research-orchestrator-agent |
+```text
+User: /research-executor [STRUCTURED_PROMPT]
 
-## Integration with Agents
+Skill:
+1. 验证提示结构
+2. 调用 general-purpose agent with coordinator workflow
+3. 返回: "Research completed → RESEARCH/[topic]/"
+```
 
-**Primary Agent**: `research-orchestrator-agent`
-- Handles all 7 phases
-- Manages agent deployment
-- Enforces quality gates
-- Coordinates synthesis and validation
+---
 
-**Supporting Agents** (invoked by orchestrator):
-- `got-agent`: For complex research optimization
-- `synthesizer-agent`: For findings aggregation
-- `red-team-agent`: For quality validation
-- `ontology-scout-agent`: For domain reconnaissance
-- Multiple research agents (web, academic, verification)
-
-## Key Features
-
-- **Simplified Design**: ~95% of logic moved to orchestrator agent
-- **Backwards Compatible**: Same interface for users
-- **Better Error Recovery**: Agent-level autonomy improves resilience
-- **Clearer Separation**: Skill = invocation, Agent = execution
-
-## Examples
-
-See [examples.md](./examples.md) for usage scenarios.
-
-## Detailed Instructions
-
-See [instructions.md](./instructions.md) for implementation guide.
+**Agent**: `general-purpose` with embedded coordinator instructions to coordinate 7 phases
