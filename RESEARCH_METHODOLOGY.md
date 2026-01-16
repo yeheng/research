@@ -1,57 +1,65 @@
-# Deep Research Methodology with Graph of Thoughts
+# Research Methodology
 
-## Overview
+**深度研究方法论** - 使用 Graph of Thoughts 的完整指南
 
-This document provides comprehensive methodology for conducting AI-driven deep research using the Graph of Thoughts (GoT) framework. This approach autonomously conducts multi-step research through iterative searching, reading, analyzing, and synthesizing information with explicit citations.
-
-**Key Features:**
-
-- 7-phase structured research process
-- Graph of Thoughts for complex reasoning and optimization
-- Multi-agent parallel deployment (3-8 agents)
-- Rigorous citation standards with A-E quality ratings
-- Chain-of-Verification to prevent hallucinations
-- Self-contained implementation using Task agents
-
-**Important Notes:**
-
-- All research outputs saved in `RESEARCH/[topic_name]/` directory
-- Break down large documents into smaller files to avoid context limitations
-- Use TodoWrite to track task completion throughout execution
-- Maintain graph state when using GoT Controller
+> 📘 **相关文档**: [CLAUDE.md](CLAUDE.md) | [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ---
 
-## Understanding Graph of Thoughts
+## 概述
 
-Graph of Thoughts is a reasoning framework where:
+本文档提供使用 Graph of Thoughts (GoT) 框架进行 AI 驱动深度研究的完整方法论。这种方法通过迭代搜索、阅读、分析和综合信息，并包含显式引用，实现自主多步骤研究。
 
-- **Thoughts = Nodes**: Each research finding or synthesis is a node with a unique ID
-- **Edges = Dependencies**: Connect parent thoughts to child thoughts
-- **Transformations**: Operations that create (Generate), merge (Aggregate), or improve (Refine) thoughts
-- **Scoring**: Every thought is evaluated 0-10 for quality based on citation density, source credibility, claim verification, comprehensiveness, and logical coherence
-- **Pruning**: Low-scoring branches are abandoned using KeepBestN(n) operations
-- **Frontier**: Active nodes available for expansion
+**关键特性**:
 
-The system explores multiple research paths in parallel, scores them, and finds optimal solutions through graph traversal.
+- 7 阶段结构化研究流程
+- Graph of Thoughts 复杂推理与优化
+- 多代理并行部署 (3-8 个代理)
+- 严格的引用标准与 A-E 质量评级
+- 链式验证防止幻觉
+- 使用 Task 代理的自我包含实现
 
-### GoT Transformation Operations
+**重要提示**:
 
-| Operation | Purpose | Example |
-|-----------|---------|---------|
-| **Generate(k)** | Create k new thoughts from a parent | Generate(3) → 3 diverse research angles |
-| **Aggregate(k)** | Merge k thoughts into one stronger thought | Aggregate(3) → 1 comprehensive synthesis |
-| **Refine(1)** | Improve a thought without adding new content | Refine(node_5) → Enhanced clarity and depth |
-| **Score** | Evaluate thought quality (0-10) | Based on citations, accuracy, completeness |
-| **KeepBestN(n)** | Prune to keep only top n nodes per level | KeepBestN(5) → Retain best 5 paths |
+- 所有研究输出保存在 `RESEARCH/[topic_name]/` 目录
+- 分割大文档避免上下文限制
+- 使用 TodoWrite 跟踪任务完成
+- 使用 GoT 控制器时维护图状态
 
-### Graph State Structure
+---
+
+## Graph of Thoughts 理解
+
+### 基础概念
+
+Graph of Thoughts 是一个推理框架，其中：
+
+- **思想 = 节点**: 每个研究发现或综合是一个具有唯一 ID 的节点
+- **边 = 依赖关系**: 连接父思想到子思想
+- **转换**: 创建 (Generate)、合并 (Aggregate) 或改进 (Refine) 思想的操作
+- **评分**: 每个思想基于引用密度、来源可信度、声明验证、全面性和逻辑连贯性评估 0-10 分
+- **剪枝**: 低分分支使用 KeepBestN(n) 操作被放弃
+- **前沿**: 可用于扩展的活动节点
+
+系统通过并行探索多个研究路径、评分它们，并通过图遍历找到最优解。
+
+### GoT 转换操作
+
+| 操作 | 目的 | 示例 |
+|------|------|------|
+| **Generate(k)** | 从父思想创建 k 个新思想 | Generate(3) → 3 个不同的研究角度 |
+| **Aggregate(k)** | 将 k 个思想合并为一个更强的思想 | Aggregate(3) → 1 个综合综述 |
+| **Refine(1)** | 在不添加新内容的情况下改进思想 | Refine(node_5) → 增强清晰度和深度 |
+| **Score** | 评估思想质量 (0-10) | 基于引用、准确性、完整性 |
+| **KeepBestN(n)** | 剪枝以保留每层仅前 n 个节点 | KeepBestN(5) → 保留最佳 5 条路径 |
+
+### 图状态结构
 
 ```json
 {
   "nodes": {
     "n1": {
-      "text": "Research finding with citations",
+      "text": "带有引用的研究发现",
       "score": 8.5,
       "type": "root|generated|aggregated|refined",
       "depth": 0,
@@ -69,209 +77,209 @@ The system explores multiple research paths in parallel, scores them, and finds 
 }
 ```
 
-### Graph Traversal Strategy
+### 图遍历策略
 
-The Controller maintains the graph and decides which transformations to apply:
+控制器维护图状态并决定应用哪些转换：
 
-1. **Early Depth (0-2)**: Aggressive Generate(3) to explore search space
-2. **Mid Depth (2-3)**: Mix of Generate for promising paths + Refine for weak nodes
-3. **Late Depth (3-4)**: Aggregate best branches + final Refine
-4. **Pruning**: Keep only top 5 nodes per depth level
-5. **Termination**: When best node scores 9+ or depth exceeds 4
-
----
-
-## The 7-Phase Deep Research Process
-
-### Phase 1: Question Scoping
-
-**Objective:** Transform vague questions into structured research prompts
-
-**Activities:**
-
-- Clarify the research question with the user through structured dialogue
-- Define output format and success criteria
-- Identify constraints, scope boundaries, and desired tone
-- Determine target audience and technical depth
-- Create unambiguous query with clear parameters
-
-**User Interaction - Ask clarifying questions about:**
-
-- Specific focus areas
-- Output format requirements (report, presentation, analysis)
-- Geographic and time scope
-- Target audience (technical team, executives, general)
-- Special requirements (data, visualizations, comparisons)
-
-**Deliverable:** Structured research prompt with clear objectives
+1. **早期深度 (0-2)**: 激进的 Generate(3) 探索搜索空间
+2. **中期深度 (2-3)**: 为有前景的路径 Generate + 为弱节点 Refine 混合
+3. **后期深度 (3-4)**: Aggregate 最佳分支 + 最终 Refine
+4. **剪枝**: 每个深度层级仅保留前 5 个节点
+5. **终止**: 当最佳节点评分 9+ 或深度超过 4
 
 ---
 
-### Phase 2: Retrieval Planning
+## 7 阶段深度研究流程
 
-**Objective:** Create a comprehensive research execution plan
+### Phase 1: 问题范围界定
 
-**Activities:**
+**目标**: 将模糊问题转换为结构化研究提示
 
-- Break main question into 3-5 subtopics
-- Generate specific search queries for each subtopic
-- Select appropriate data sources (academic, industry, news)
-- Plan multi-agent deployment strategy (3-8 agents)
-- Use GoT to model the research as a graph of operations
-- Create research plan for user approval
+**活动**:
 
-**Subtopic Breakdown Template:**
+- 通过结构化对话澄清研究问题
+- 定义输出格式和成功标准
+- 识别约束、范围边界和所需语气
+- 确定目标受众和技术深度
+- 创建具有清晰参数的明确查询
 
-1. Current state and trends
-2. Key challenges and limitations
-3. Future developments and predictions
-4. Case studies and real-world applications
-5. Expert opinions and industry perspectives
+**用户交互 - 澄清问题**:
 
-**Agent Deployment Planning:**
+- 具体焦点领域
+- 输出格式要求（报告、演示、分析）
+- 地理和时间范围
+- 目标受众（技术团队、高管、普通）
+- 特殊要求（数据、可视化、比较）
 
-- 3-5 Web Research Agents: Current information, trends, news
-- 1-2 Academic/Technical Agents: Papers, specifications, methodologies
-- 1 Cross-Reference Agent: Fact-checking and verification
-
-**Deliverable:** Detailed research plan with agent deployment strategy for user approval
+**交付物**: 具有清晰目标的结构化研究提示
 
 ---
 
-### Phase 3: Iterative Querying
+### Phase 2: 检索规划
 
-**Objective:** Execute systematic information gathering with parallel agents
+**目标**: 创建全面的研究执行计划
 
-**Activities:**
+**活动**:
 
-- Deploy 3-8 specialized research agents in parallel
-- Execute searches systematically across multiple sources
-- Navigate and extract relevant information
-- Formulate new queries based on findings (ReAct pattern)
-- Apply GoT operations for complex reasoning
-- Use multiple search modalities (WebSearch, WebFetch, Puppeteer)
+- 将主问题分解为 3-5 个子主题
+- 为每个子主题生成特定搜索查询
+- 选择适当的数据源（学术、行业、新闻）
+- 规划多代理部署策略（3-8 个代理）
+- 使用 GoT 将研究建模为操作图
+- 创建用户批准的研究计划
 
-**Tools:**
+**子主题分解模板**:
 
-- **WebSearch**: General web searches for finding relevant sources
-- **WebFetch**: Extract and analyze content from specific URLs
-- **mcp__puppeteer__**: Browser automation for JavaScript-heavy sites
-- **Task**: Deploy autonomous agents for multi-step operations
+1. 当前状态和趋势
+2. 关键挑战和限制
+3. 未来发展和预测
+4. 案例研究和实际应用
+5. 专家意见和行业观点
 
-**Agent Types:**
+**代理部署规划**:
 
-- **Web Research Agents (3-5)**: Current information, trends, news, real-world data
-- **Academic/Technical Agents (1-2)**: Research papers, technical specifications, methodologies
-- **Cross-Reference Agent (1)**: Fact-checking, verification, cross-validation
+- 3-5 个 Web 研究代理: 当前信息、趋势、新闻
+- 1-2 个学术/技术代理: 论文、规范、方法论
+- 1 个交叉引用代理: 事实核查和验证
 
-**Deliverable:** Raw research findings from all agents with source URLs and confidence ratings
-
----
-
-### Phase 4: Source Triangulation
-
-**Objective:** Validate and cross-reference all findings
-
-**Activities:**
-
-- Compare findings across multiple sources
-- Validate claims with cross-references (minimum 2+ sources for critical claims)
-- Handle inconsistencies and contradictions
-- Assess source credibility using A-E rating system
-- Use GoT scoring functions to evaluate information quality
-- Apply Chain-of-Verification techniques
-
-**Validation Protocol:**
-
-1. **Primary Sources Only** - Link to original research, not secondary reporting
-2. **Archive Links** - For time-sensitive content, include archive.org links
-3. **Multiple Confirmations** - Critical claims need 2+ independent sources
-4. **Conflicting Data** - Note when sources disagree and explain discrepancies
-5. **Source Quality Ratings** - Apply A-E scale to every source
-
-**Deliverable:** Validated findings with confidence ratings and source quality assessments
+**交付物**: 用户批准的详细研究计划和代理部署策略
 
 ---
 
-### Phase 5: Knowledge Synthesis
+### Phase 3: 迭代查询
 
-**Objective:** Combine findings into coherent narrative
+**目标**: 使用并行代理执行系统性信息收集
 
-**Activities:**
+**活动**:
 
-- Structure content logically with clear sections
-- Write comprehensive sections with proper flow
-- Include inline citations for every factual claim
-- Add data visualizations when relevant
-- Use GoT Aggregate operations to merge findings
-- Apply Chain-of-Density for information compression
+- 并行部署 3-8 个专业研究代理
+- 跨多个来源系统执行搜索
+- 导航和提取相关信息
+- 基于发现制定新查询（ReAct 模式）
+- 应用 GoT 操作进行复杂推理
+- 使用多种搜索模态（WebSearch、WebFetch、Puppeteer）
 
-**Synthesis Process:**
+**工具**:
 
-1. Collect all agent findings
-2. Identify overlaps and contradictions
-3. Resolve conflicts with evidence
-4. Create unified narrative
-5. Maintain source attribution from each agent
+- **WebSearch**: 查找相关源的一般网络搜索
+- **WebFetch**: 从特定 URL 提取和分析内容
+- **mcp__puppeteer__**: JavaScript 重型网站的浏览器自动化
+- **Task**: 多步操作的自主导代理
 
-**Chain-of-Density Approach:**
+**代理类型**:
 
-1. First pass: Extract key points (low density)
-2. Second pass: Add supporting details and context
-3. Third pass: Compress while preserving all critical information
-4. Final pass: Maximum density with all essential facts and citations
+- **Web 研究代理 (3-5)**: 当前信息、趋势、新闻、真实世界数据
+- **学术/技术代理 (1-2)**: 研究论文、技术规范、方法论
+- **交叉引用代理 (1)**: 事实核查、验证、交叉验证
 
-**Deliverable:** Draft research report with inline citations
+**交付物**: 所有代理的原始研究发现，包含来源 URL 和置信度评级
 
 ---
 
-### Phase 6: Quality Assurance
+### Phase 4: 来源三角验证
 
-**Objective:** Ensure accuracy and completeness
+**目标**: 验证和交叉引用所有发现
 
-**Activities:**
+**活动**:
 
-- Check for hallucinations and unsupported claims
-- Verify all citations match content
-- Ensure completeness and clarity
-- Apply Chain-of-Verification techniques
-- Use GoT ground truth operations for validation
-- Run citation validator on final document
+- 跨多个来源比较发现
+- 使用交叉引用验证声明（关键声明至少 2+ 个来源）
+- 处理不一致和矛盾
+- 使用 A-E 评级系统评估来源可信度
+- 使用 GoT 评分函数评估信息质量
+- 应用链式验证技术
 
-**Quality Checklist:**
+**验证协议**:
 
-- [ ] Every claim has a verifiable source
-- [ ] Multiple sources corroborate key findings
-- [ ] Contradictions are acknowledged and explained
-- [ ] Sources are recent and authoritative
-- [ ] No hallucinations or unsupported claims
-- [ ] Clear logical flow from evidence to conclusions
-- [ ] Proper citation format throughout
+1. **仅主来源** - 链接到原始研究，而非二次报告
+2. **存档链接** - 对于时间敏感内容，包含 archive.org 链接
+3. **多次确认** - 关键声明需要 2+ 个独立来源
+4. **冲突数据** - 记录来源何时不同意并解释差异
+5. **来源质量评级** - 对每个来源应用 A-E 等级
 
-**Deliverable:** Quality-assured research report
+**交付物**: 带有置信度评级和来源质量评估的验证发现
 
 ---
 
-### Phase 7: Output & Packaging
+### Phase 5: 知识综合
 
-**Objective:** Format and deliver final research
+**目标**: 将发现组合成连贯叙述
 
-**Activities:**
+**活动**:
 
-- Format for optimal readability
-- Create executive summary (1-2 pages)
-- Generate proper bibliography with source quality ratings
-- Organize into folder structure
-- Export in requested format
-- Include methodology and limitations documentation
+- 使用清晰部分逻辑结构化内容
+- 使用适当流程编写综合部分
+- 为每个事实声明包含内联引用
+- 在相关时添加数据可视化
+- 使用 GoT Aggregate 操作合并发现
+- 应用链式密度进行信息压缩
 
-**Output Structure:**
+**综合过程**:
+
+1. 收集所有代理发现
+2. 识别重叠和矛盾
+3. 使用证据解决冲突
+4. 创建统一叙述
+5. 维护来自每个代理的来源归属
+
+**链式密度方法**:
+
+1. 第一遍: 提取关键点（低密度）
+2. 第二遍: 添加支持细节和上下文
+3. 第三遍: 压缩同时保留所有关键信息
+4. 最终遍历: 包含所有基本事实和引用的最大密度
+
+**交付物**: 带内联引用的草稿研究报告
+
+---
+
+### Phase 6: 质量保证
+
+**目标**: 确保准确性和完整性
+
+**活动**:
+
+- 检查幻觉和无支持声明
+- 验证所有引用匹配内容
+- 确保完整性和清晰度
+- 应用链式验证技术
+- 使用 GoT 真值操作进行验证
+- 在最终文档上运行引用验证器
+
+**质量检查清单**:
+
+- [ ] 每个声明都有可验证来源
+- [ ] 多个来源证实关键发现
+- [ ] 矛盾得到承认和解释
+- [ ] 来源是近期和权威的
+- [ ] 无幻觉或无支持声明
+- [ ] 从证据到结论的清晰逻辑流程
+- [ ] 全程适当的引用格式
+
+**交付物**: 质量保证的研究报告
+
+---
+
+### Phase 7: 输出与打包
+
+**目标**: 格式化和交付最终研究
+
+**活动**:
+
+- 格式化以获得最佳可读性
+- 创建执行摘要（1-2 页）
+- 生成带有来源质量评级的适当参考书目
+- 组织到文件夹结构
+- 以请求格式导出
+- 包含方法和局限性文档
+
+**输出结构**:
 
 ```
 RESEARCH/[topic_name]/
-├── README.md                    # Overview and navigation guide
-├── executive_summary.md         # 1-2 page key findings
-├── full_report.md               # Complete analysis (20-50 pages)
+├── README.md                    # 概述和导航指南
+├── executive_summary.md         # 1-2 页关键发现
+├── full_report.md               # 完整分析 (20-50 页)
 ├── data/
 │   ├── raw_data.csv
 │   ├── processed_data.json
@@ -282,7 +290,7 @@ RESEARCH/[topic_name]/
 │   └── descriptions.md
 ├── sources/
 │   ├── bibliography.md
-│   ├── source_quality_table.md  # A-E ratings
+│   ├── source_quality_table.md  # A-E 评级
 │   └── screenshots/
 ├── research_notes/
 │   ├── agent_1_findings.md
@@ -294,675 +302,318 @@ RESEARCH/[topic_name]/
     └── future_research.md
 ```
 
-**Deliverable:** Complete research package in RESEARCH/[topic_name]/ directory
+**交付物**: RESEARCH/[topic_name]/ 目录中的完整研究包
 
 ---
 
-## Multi-Agent Deployment Strategy
+## GoT 实现细节
 
-### Overview
+### 核心 GoT 执行
 
-Deploy multiple Task agents in parallel to maximize research efficiency and coverage. This approach mirrors how a research team would divide work among specialists.
+当请求深度研究时，部署维护图状态和编排转换的 GoT 控制器：
 
-### Agent Deployment Protocol
+#### GoT 执行循环
 
-**Step 1: Create Research Plan**
-
-- Break down main question into specific subtopics
-- Assign one agent per subtopic/research angle
-- Define clear task boundaries to minimize redundancy
-
-**Step 2: Launch Parallel Agents**
-Use multiple Task tool invocations in a single response. Each agent receives:
-
-- Clear description of their research focus
-- Specific instructions on what to find
-- Expected output format with citation requirements
-- List of tools to use (WebSearch, WebFetch, Puppeteer)
-
-**Step 3: Coordinate Results**
-After agents complete their tasks:
-
-- Compile findings from all agents
-- Identify overlaps and contradictions
-- Synthesize into coherent narrative
-- Maintain source attribution from each agent
-
-### Agent Prompt Templates
-
-#### General Research Agent Template
-
-```
-Research [specific aspect] of [main topic]. Use the following tools:
-1. Start with WebSearch to find relevant sources
-2. Use WebFetch to extract content from promising URLs
-3. If sites require JavaScript, use mcp__puppeteer__puppeteer_navigate and screenshot
-
-Focus on finding:
-- Recent information (prioritize last 2 years)
-- Authoritative sources
-- Specific data/statistics
-- Multiple perspectives
-
-For every factual claim, provide:
-1. Direct quote or specific data point
-2. Author/organization name
-3. Publication year
-4. Full title
-5. Direct URL/DOI
-6. Confidence rating (High/Medium/Low)
-
-Never make claims without sources. If uncertain, state 'Source needed' rather than guessing.
-
-Provide a structured summary with all source URLs.
-```
-
-#### Technical Research Agent Template
-
-```
-Find technical/academic information about [topic aspect].
-
-Tools to use:
-1. WebSearch for academic papers and technical resources
-2. WebFetch for PDF extraction and content analysis
-3. mcp__filesystem__ tools to save important findings
-
-Look for:
-- Peer-reviewed papers
-- Technical specifications
-- Methodologies and frameworks
-- Scientific evidence
-
-Include proper academic citations with DOI/PMID when available.
-```
-
-#### Verification Agent Template
-
-```
-Verify the following claims about [topic]:
-[List key claims to verify]
-
-Use multiple search queries with WebSearch to find:
-- Supporting evidence
-- Contradicting information
-- Original sources
-
-Rate confidence: High/Medium/Low for each claim.
-Explain any contradictions found.
-Cross-reference at least 2 independent sources for critical claims.
-```
-
-### Best Practices
-
-1. **Clear Task Boundaries**: Each agent should have distinct, non-overlapping focus
-2. **Comprehensive Prompts**: Include all necessary context and citation requirements
-3. **Parallel Execution**: Launch all agents in one response for maximum efficiency
-4. **Result Integration**: Plan synthesis strategy before launching agents
-5. **Quality Control**: Always include at least one verification agent
-
-### Example Multi-Agent Deployment
-
-When researching "AI in Healthcare", deploy agents as follows:
-
-**Agent 1**: "Research current AI applications in healthcare - focus on clinical diagnosis and treatment"
-**Agent 2**: "Find challenges and ethical concerns in medical AI - regulatory and privacy issues"
-**Agent 3**: "Investigate future AI healthcare innovations - emerging technologies and predictions"
-**Agent 4**: "Gather case studies of successful AI healthcare implementations - ROI and outcomes"
-**Agent 5**: "Cross-reference and verify key statistics about AI healthcare impact - validate claims"
-
----
-
-## Graph of Thoughts Implementation
-
-### Core GoT Implementation
-
-When deep research is requested, deploy a GoT Controller that maintains graph state and orchestrates transformations:
-
-#### GoT Execution Loop
-
-```
+```typescript
 repeat until DONE {
-    1. Select frontier thoughts with Ranker R (top-3 highest scoring)
-    2. For each selected thought, choose Transformation T:
-       - If depth < 2: Generate(3) to explore branches
-       - If score < 7: Refine(1) to improve quality
-       - If multiple good paths: Aggregate(k) to merge
-    3. Deploy transformation agents and await results
-    4. Update graph with new nodes, edges, and scores
-    5. Prune: KeepBestN(5) at each depth level
-    6. Exit when max_score > 9 or depth > 4
+    1. 选择 Ranker R 的前沿思想（评分最高的前 3 个）
+    2. 为每个选定的思想，选择转换 T:
+       - 如果深度 < 2: Generate(3) 探索分支
+       - 如果评分 < 7: Refine(1) 改进质量
+       - 如果多个良好路径: Aggregate(k) 合并
+    3. 部署转换代理并等待结果
+    4. 使用新节点、边和评分更新图
+    5. 剪枝: 在每个深度级别 KeepBestN(5)
+    6. 当 max_score > 9 或深度 > 4 时退出
 }
 ```
 
-### Transformation Agent Templates
+### 转换代理模板
 
-#### Generate Agent Template
+> **注意**: 完整的代理模板已移至 `.claude/agents/` 目录。
+> 以下为简化参考 - 实际实现请参考相应的 AGENT.md 文件。
 
-```
-Task: "GoT Generate - Node [ID] Branch [k]"
+#### Generate 代理
 
-You are Generate transformation creating branch [k] from parent thought:
-"[PARENT_THOUGHT]"
+**位置**: `.claude/agents/got-agent/AGENT.md`
 
-Your specific exploration angle: [ANGLE]
-- Angle 1: Current state and evidence
-- Angle 2: Challenges and limitations
-- Angle 3: Future implications
+**核心职责**:
+- 从父思想创建 k 个并行研究路径
+- 每个路径探索不同角度
+- 返回带有评分的 k 个节点
 
-Execute:
-1. WebSearch for "[TOPIC] [ANGLE]" - find 5 sources
-2. Score each source quality (1-10)
-3. WebFetch top 3 sources
-4. Synthesize findings into coherent thought (200-400 words)
-5. Self-score your thought (0-10) based on:
-   - Claim accuracy
-   - Citation density
-   - Novel insights
-   - Coherence
+#### Aggregate 代理
 
-Return:
-{
-  "thought": "your synthesized findings with inline citations",
-  "score": float,
-  "sources": ["url1", "url2", "url3"],
-  "operation": "Generate",
-  "parent": "[PARENT_ID]"
-}
-```
+**位置**: `.claude/agents/got-agent/AGENT.md`
 
-#### Aggregate Agent Template
+**核心职责**:
+- 将 k 个思想合并为一个更强的统一思想
+- 解决矛盾
+- 保留所有引用
+- 返回比任何输入都更高质量的 1 个节点
 
-```
-Task: "GoT Aggregate - Nodes [IDs]"
+#### Refine 代理
 
-You are Aggregate transformation combining these [k] thoughts:
+**位置**: `.claude/agents/got-agent/AGENT.md`
 
-[THOUGHT_1]
-Score: [SCORE_1]
-
-[THOUGHT_2]
-Score: [SCORE_2]
-
-Combine into ONE stronger unified thought that:
-- Preserves all important claims
-- Resolves contradictions
-- Maintains all citations
-- Achieves higher quality than any input
-
-Self-score the result (0-10).
-
-Return:
-{
-  "thought": "aggregated synthesis",
-  "score": float,
-  "operation": "Aggregate",
-  "parents": [parent_ids]
-}
-```
-
-#### Refine Agent Template
-
-```
-Task: "GoT Refine - Node [ID]"
-
-You are Refine transformation improving this thought:
-"[CURRENT_THOUGHT]"
-Current score: [SCORE]
-
-Improve by:
-1. Fact-check claims using WebSearch
-2. Add missing context/nuance
-3. Strengthen weak arguments
-4. Fix citation issues
-5. Enhance clarity
-
-Do NOT add new major points - only refine existing content.
-
-Self-score improvement (0-10).
-
-Return refined thought with updated score.
-```
-
-### Complete GoT Research Example
-
-**User Request:** "Deep research CRISPR gene editing safety"
-
-**Iteration 1: Initialize and Explore**
-
-1. Controller Agent creates root node: "Research CRISPR gene editing safety"
-2. Generate(3) deploys 3 parallel agents exploring:
-   - Current evidence and success rates
-   - Safety concerns and limitations
-   - Future implications and regulations
-3. Results: 3 thoughts with scores (6.8, 8.2, 7.5)
-4. Graph state saved with frontier = [n3(8.2), n2(7.5), n4(6.8)]
-
-**Iteration 2: Deepen Best Paths**
-
-1. Controller examines frontier, decides:
-   - n3 (8.2): High score → Generate(3) for deeper exploration
-   - n2 (7.5): Medium → Generate(2)
-   - n4 (6.8): Low → Refine(1) to improve
-2. 6 agents deployed in parallel
-3. Best result: "High-fidelity SpCas9 variants reduce off-targets by 95%" (Score: 9.1)
-
-**Iteration 3: Aggregate Strong Branches**
-
-1. Controller sees multiple high scores
-2. Aggregate(3) merges best thoughts into comprehensive synthesis
-3. Score: 9.3 - exceeds threshold
-
-**Iteration 4: Final Polish**
-
-1. Refine(1) enhances clarity and completeness
-2. Final thought scores 9.5
-3. Output: Best path through graph becomes research report
-
-**What Makes This True GoT:**
-
-- Graph maintained throughout with nodes, edges, scores
-- Multiple paths explored in parallel
-- Pruning drops weak branches
-- Scoring guides exploration vs exploitation
-- Optimal solution found through graph traversal
+**核心职责**:
+- 在不添加新主要内容的情况下改进思想
+- 使用 WebSearch 进行事实核查
+- 增强清晰度和完整性
+- 返回改进的思想
 
 ---
 
-## Citation Requirements & Source Traceability
+## 引用要求与来源可追溯性
 
-### Mandatory Citation Standards
+### 强制性引用标准
 
-**Every factual claim must include:**
+**每个事实声明必须包含**:
 
-1. **Author/Organization** - Who made this claim
-2. **Date** - When the information was published
-3. **Source Title** - Name of paper, article, or report
-4. **URL/DOI** - Direct link to verify the source
-5. **Page Numbers** - For lengthy documents (when applicable)
+1. **作者/组织** - 谁做出此声明
+2. **日期** - 信息发布时间
+3. **来源标题** - 论文、文章或报告名称
+4. **URL/DOI** - 直接链接以验证来源
+5. **页码** - 对于长文档（如适用）
 
-### Citation Formats
+### 引用格式
 
-**Academic Papers:**
+**学术论文**:
 
 ```
-(Author et al., Year, p. XX) with full citation in references
-Example: (Smith et al., 2023, p. 145)
-Full: Smith, J., Johnson, K., & Lee, M. (2023). "Title of Paper." Journal Name, 45(3), 140-156. https://doi.org/10.xxxx/xxxxx
+(Author et al., Year, p. XX) 附参考中的完整引用
+示例: (Smith et al., 2023, p. 145)
+完整: Smith, J., Johnson, K., & Lee, M. (2023). "Title of Paper." Journal Name, 45(3), 140-156. https://doi.org/10.xxxx/xxxxx
 ```
 
-**Web Sources:**
+**网络来源**:
 
 ```
 (Organization, Year, Section Title)
-Example: (NIH, 2024, "Treatment Guidelines")
-Full: National Institutes of Health. (2024). "Treatment Guidelines for Metabolic Syndrome." Retrieved [date] from https://www.nih.gov/specific-page
+示例: (NIH, 2024, "Treatment Guidelines")
+完整: National Institutes of Health. (2024). "Treatment Guidelines for Metabolic Syndrome." Retrieved [date] from https://www.nih.gov/specific-page
 ```
 
-**Direct Quotes:**
+**直接引用**:
 
 ```
 "Exact quote from source" (Author, Year, p. XX)
 ```
 
-### Source Quality Ratings
+### 来源质量评级
 
-Rate every source using this A-E scale:
+使用此 A-E 等级评估每个来源：
 
-- **A**: Peer-reviewed RCTs, systematic reviews, meta-analyses
-- **B**: Cohort studies, case-control studies, clinical guidelines, reputable analysts
-- **C**: Expert opinion, case reports, mechanistic studies
-- **D**: Preliminary research, preprints, conference abstracts, blogs
-- **E**: Anecdotal, theoretical, or speculative
+- **A**: 同行评审 RCT、系统综述、荟萃分析
+- **B**: 队列研究、病例对照研究、临床指南、reputable 分析师
+- **C**: 专家意见、病例报告、机制研究
+- **D**: 初步研究、预印本、会议摘要、博客
+- **E**: 轶事、理论或推测
 
-### Source Verification Protocol
+### 来源验证协议
 
-1. **Primary Sources Only** - Link to original research, not secondary reporting
-2. **Archive Links** - For time-sensitive content, include archive.org links
-3. **Multiple Confirmations** - Critical claims need 2+ independent sources
-4. **Conflicting Data** - Note when sources disagree and explain discrepancies
-5. **Recency Check** - Prioritize sources from last 2 years when relevant
+1. **仅主来源** - 链接到原始研究，而非二次报告
+2. **存档链接** - 对于时间敏感内容，包含 archive.org 链接
+3. **多次确认** - 关键声明需要 2+ 个独立来源
+4. **冲突数据** - 记录来源何时不同意并解释差异
+5. **近期检查** - 相关时优先考虑近 2 年的来源
 
-### Traceability Requirements
+### 可追溯性要求
 
-**For Medical/Health Information:**
+**对于医疗/健康信息**:
 
-- PubMed ID (PMID) when available
-- Clinical trial registration numbers
-- FDA/regulatory body references
-- Version/update dates for guidelines
+- 可用时的 PubMed ID (PMID)
+- 临床试验注册号
+- FDA/监管机构引用
+- 指南的版本/更新日期
 
-**For Genetic Information:**
+**对于遗传信息**:
 
-- dbSNP rs numbers
-- Gene database links (OMIM, GeneCards)
-- Population frequency sources (gnomAD, 1000 Genomes)
-- Effect size sources with confidence intervals
+- dbSNP rs 号
+- 基因数据库链接（OMIM、GeneCards）
+- 群体频率来源（gnomAD、1000 Genomes）
+- 带置信区间的效应大小来源
 
-**For Statistical Claims:**
+**对于统计声明**:
 
-- Sample sizes
-- P-values and confidence intervals
-- Statistical methods used
-- Data availability statements
+- 样本大小
+- P 值和置信区间
+- 使用的统计方法
+- 数据可用性声明
 
-### Source Documentation Structure
+### 来源文档结构
 
-Each research output must include:
+每个研究输出必须包括：
 
-1. **Inline Citations** - Throughout the text
-2. **References Section** - Full bibliography at end
-3. **Source Quality Table** - Rating each source A-E
-4. **Verification Checklist** - Confirming each claim is sourced
-5. **Data Availability** - Where raw data can be accessed
-
-### Example Implementation
-
-**Poor Citation:**
-"Studies show that metformin reduces diabetes risk."
-
-**Proper Citation:**
-"The Diabetes Prevention Program demonstrated that metformin reduces diabetes incidence by 31% over 2.8 years in high-risk individuals (Knowler et al., 2002, NEJM, PMID: 11832527, <https://doi.org/10.1056/NEJMoa012512>)"
-
-### Red Flags for Unreliable Sources
-
-- No author attribution
-- Missing publication dates
-- Broken or suspicious URLs
-- Claims without data
-- Conflicts of interest not disclosed
-- Predatory journals
-- Retracted papers (check RetractionWatch)
+1. **内联引用** - 贯穿文本
+2. **参考部分** - 末尾的完整参考书目
+3. **来源质量表** - 评估每个来源 A-E
+4. **验证检查清单** - 确认每个声明有来源
+5. **数据可用性** - 可访问原始数据的位置
 
 ---
 
-## Advanced Research Methodologies
+## 高级研究方法
 
-### Chain-of-Verification (CoVe)
+### 链式验证 (CoVe)
 
-To prevent hallucinations:
+为防止幻觉：
 
-1. Generate initial research findings
-2. Create verification questions for each claim
-3. Search for evidence to answer verification questions
-4. Revise findings based on verification results
-5. Repeat until all claims are verified
+1. 生成初始研究发现
+2. 为每个声明创建验证问题
+3. 搜索证据回答验证问题
+4. 基于验证结果修订发现
+5. 重复直到所有声明得到验证
 
-### Chain-of-Density (CoD) Summarization
+### 链式密度 (CoD) 总结
 
-When processing sources, use iterative refinement to increase information density:
+处理来源时，使用迭代细化增加信息密度：
 
-1. First pass: Extract key points (low density)
-2. Second pass: Add supporting details and context
-3. Third pass: Compress while preserving all critical information
-4. Final pass: Maximum density with all essential facts and citations
+1. 第一遍: 提取关键点（低密度）
+2. 第二遍: 添加支持细节和上下文
+3. 第三遍: 压缩同时保留所有关键信息
+4. 最终遍历: 包含所有基本事实和引用的最大密度
 
-### ReAct Pattern (Reason + Act)
+### ReAct 模式（推理 + 行动）
 
-Agents should follow this loop:
+代理应遵循此循环：
 
-1. **Reason**: Analyze what information is needed
-2. **Act**: Execute search or retrieval action
-3. **Observe**: Process the results
-4. **Reason**: Determine if more information needed
-5. **Repeat**: Continue until sufficient evidence gathered
+1. **推理**: 分析需要什么信息
+2. **行动**: 执行搜索或检索操作
+3. **观察**: 处理结果
+4. **推理**: 确定是否需要更多信息
+5. **重复**: 继续直到收集足够证据
 
-### Multi-Agent Orchestration Roles
+### 多代理编排角色
 
-For complex topics, deploy specialized agents:
+对于复杂主题，部署专业代理：
 
-- **Planner Agent**: Decomposes research into subtopics
-- **Search Agents**: Execute queries and retrieve sources
-- **Synthesis Agents**: Combine findings from multiple sources
-- **Critic Agents**: Verify claims and check for errors
-- **Editor Agent**: Polishes final output
+- **规划器代理**: 将研究分解为子主题
+- **搜索代理**: 执行查询和检索来源
+- **综合代理**: 合并多个来源的发现
+- **批评代理**: 验证声明和检查错误
+- **编辑代理**: 润色最终输出
 
-### Human-in-the-Loop Checkpoints
+### 人工循环检查点
 
-Critical intervention points:
+关键干预点：
 
-1. **After Planning**: Approve research strategy
-2. **During Verification**: Expert review of technical claims
-3. **Before Finalization**: Stakeholder sign-off
-4. **Post-Delivery**: Feedback incorporation
-
----
-
-## Implementation Tools
-
-### Core Tools
-
-1. **WebSearch**: Built-in web search capability for finding relevant sources
-2. **WebFetch**: For extracting and analyzing content from specific URLs
-3. **Read/Write**: For managing research documents locally
-4. **Task**: For spawning autonomous agents for complex multi-step operations
-5. **TodoWrite**: For tracking research progress
-
-### MCP Server Tools
-
-1. **mcp__filesystem__**: File system operations (read, write, search files)
-2. **mcp__puppeteer__**: Browser automation for dynamic web content
-   - Navigate to pages requiring JavaScript
-   - Take screenshots of web content
-   - Extract data from interactive websites
-   - Fill forms and interact with web elements
-
-### Web Research Strategy
-
-- **Primary**: Use WebSearch tool for general web searches
-- **Secondary**: Use WebFetch for extracting content from specific URLs
-- **Advanced**: Use mcp__puppeteer__ for sites requiring interaction or JavaScript rendering
-- **Note**: When MCP web fetch tools become available, prefer them over WebFetch
-
-### Tool Usage Instructions
-
-**WebSearch Usage:**
-
-```
-Use WebSearch with specific queries:
-- Include key terms in quotes for exact matches
-- Use domain filtering for authoritative sources
-- Try multiple query variations
-```
-
-**WebFetch Usage:**
-
-```
-After WebSearch identifies URLs:
-1. Use WebFetch with targeted prompts
-2. Ask for specific information extraction
-3. Request summaries of long content
-```
-
-**Puppeteer MCP Usage:**
-
-```
-For JavaScript-heavy sites:
-1. mcp__puppeteer__puppeteer_navigate to URL
-2. mcp__puppeteer__puppeteer_screenshot for visual content
-3. mcp__puppeteer__puppeteer_evaluate to extract dynamic data
-```
+1. **规划后**: 批准研究策略
+2. **验证期间**: 技术声明的专家审查
+3. **最终确定前**: 利益相关者签署
+4. **交付后**: 反馈整合
 
 ---
 
-## Mitigation Strategies
+## 工具使用策略
 
-### Hallucination Prevention
+### 核心工具
 
-- Always ground statements in source material
-- Use Chain-of-Verification for critical claims
-- Cross-reference multiple sources
-- Explicitly state uncertainty when appropriate
-- Never make claims without sources - state "Source needed" if uncertain
+1. **WebSearch**: 查找相关源的内置网络搜索能力
+2. **WebFetch**: 从特定 URL 提取和分析内容
+3. **Read/Write**: 本地管理研究文档
+4. **Task**: 复杂多步操作的自主导代理
+5. **TodoWrite**: 跟踪研究进度
 
-### Coverage Optimization
+> **详细工具架构**: 见 [ARCHITECTURE.md](ARCHITECTURE.md)
 
-- Use diverse search queries
-- Check multiple perspectives
-- Include recent sources (check dates)
-- Acknowledge limitations and gaps
-- Search across different source types (academic, industry, news)
+### Web 研究策略
 
-### Citation Management
-
-- Track source URLs and access dates
-- Quote relevant passages verbatim when needed
-- Maintain source-to-statement mapping
-- Use consistent citation format
-- Create bibliography as research progresses
+- **主要**: 使用 WebSearch 工具进行一般网络搜索
+- **次要**: 使用 WebFetch 从特定 URL 提取内容
+- **高级**: 对于需要交互或 JavaScript 渲染的站点使用 mcp__puppeteer__
+- **注意**: 当 MCP web 获取工具可用时，优先于 WebFetch 使用它们
 
 ---
 
-## User Interaction Protocol
+## 缓解策略
 
-### Initial Question Gathering Phase
+### 幻觉预防
 
-When a user requests deep research, engage in structured dialogue to gather all necessary information before beginning research.
+- 始终基于来源材料声明
+- 对关键声明使用链式验证
+- 跨多个来源验证
+- 适当时明确陈述不确定性
+- 从不做无来源声明 - 不确定时说明"需要来源"
 
-### Required Information Checklist
+### 覆盖优化
 
-Before starting research, clarify:
+- 使用多样化搜索查询
+- 检查多个视角
+- 包含近期来源（检查日期）
+- 承认限制和空白
+- 跨不同来源类型搜索（学术、行业、新闻）
 
-**1. Core Research Question**
+### 引用管理
 
-- Main topic or question to investigate
-- Specific aspects or angles of interest
-- What problem are you trying to solve?
-
-**2. Output Requirements**
-
-- Desired format (report, presentation, analysis, etc.)
-- Length expectations (executive summary vs comprehensive report)
-- File structure preferences (single document vs folder with multiple files)
-- Visual requirements (charts, graphs, diagrams, images)
-
-**3. Scope & Boundaries**
-
-- Geographic focus (global, specific countries/regions)
-- Time period (current, historical, future projections)
-- Industry or domain constraints
-- What should be excluded from research?
-
-**4. Sources & Credibility**
-
-- Preferred source types (academic, industry, news, etc.)
-- Any sources to prioritize or avoid
-- Required credibility level (peer-reviewed only, industry reports ok, etc.)
-
-**5. Deliverable Structure**
-
-- Folder organization preferences
-- Naming conventions for files
-- Whether to include:
-  - Raw research notes
-  - Source PDFs/screenshots
-  - Data files (CSV, JSON)
-  - Visualization source files
-
-**6. Special Requirements**
-
-- Specific data or statistics needed
-- Comparison frameworks to use
-- Regulatory or compliance considerations
-- Target audience for the research
-
-### Question Templates
-
-**1. Topic Clarification**
-
-- "What specific aspects of [topic] are most important for your needs?"
-- "Are you looking for current state analysis, historical trends, or future predictions?"
-
-**2. Output Specification**
-
-- "Would you prefer a single comprehensive report or multiple focused documents?"
-- "Do you need visualizations? If so, what types would be most helpful?"
-
-**3. Scope Definition**
-
-- "Are there any geographic regions or time periods I should focus on?"
-- "What level of technical detail is appropriate for your audience?"
-
-**4. Source Preferences**
-
-- "Do you have any preferred sources or databases I should prioritize?"
-- "Are there any sources or viewpoints I should avoid?"
-
-**5. Delivery Format**
-
-- "How would you like the files organized?"
-- "Do you need the raw research data or just the final analysis?"
-
-### Research Plan Approval
-
-Before executing research:
-
-1. Present subtopic breakdown
-2. Show agent deployment strategy
-3. Describe expected output structure
-4. Get user approval to proceed
+- 跟踪来源 URL 和访问日期
+- 需要时逐字引用相关段落
+- 维护来源到声明映射
+- 使用一致的引用格式
+- 研究进展时创建参考书目
 
 ---
 
-## Key Principles of Deep Research
+## 深度研究关键原则
 
-### Iterative Refinement
+### 迭代细化
 
-Deep research is not linear - it's a continuous loop of:
+深度研究不是线性的 - 它是一个连续循环：
 
-1. **Search**: Find relevant information
-2. **Read**: Extract key insights
-3. **Refine**: Generate new queries based on findings
-4. **Verify**: Cross-check claims across sources
-5. **Synthesize**: Combine into coherent narrative
-6. **Repeat**: Continue until comprehensive coverage
+1. **搜索**: 查找相关信息
+2. **阅读**: 提取关键见解
+3. **细化**: 基于发现生成新查询
+4. **验证**: 跨来源检查声明
+5. **综合**: 组合成连贯叙述
+6. **重复**: 继续直到全面覆盖
 
-### Why This Outperforms Manual Research
+### 为什么这优于手动研究
 
-- **Breadth**: AI can process 20+ sources in minutes vs days for humans
-- **Depth**: Multi-step reasoning uncovers non-obvious connections
-- **Consistency**: Systematic approach ensures no gaps
-- **Traceability**: Every claim linked to source
-- **Efficiency**: Handles low-level tasks, freeing humans for analysis
-- **Parallel Processing**: Multiple agents work simultaneously
+- **广度**: AI 可在几分钟内处理 20+ 个来源 vs 人类数天
+- **深度**: 多步推理揭示非显而易见的联系
+- **一致性**: 系统方法确保无空白
+- **可追溯性**: 每个声明链接到来源
+- **效率**: 处理低级任务，解放人类进行分析
+- **并行处理**: 多个代理同时工作
 
-### State Management
+### 状态管理
 
-Throughout the research process, maintain:
+在整个研究过程中，维护：
 
-- Current research questions
-- Sources visited and their quality scores
-- Extracted claims and verification status
-- Graph state (for GoT implementation)
-- Progress tracking against original plan
-- Agent findings and synthesis notes
-
----
-
-## Ready to Begin
-
-This methodology provides everything needed for Graph of Thoughts deep research:
-
-- **Self-contained** - No external files or dependencies required
-- **Automatic execution** - Deploys immediately when you request research
-- **True GoT implementation** - Graph state, scoring, pruning, and optimization
-- **Uses available tools** - WebSearch, WebFetch, Task agents, Puppeteer
-- **Transparent process** - Saves graph states and execution traces
-- **Rigorous quality** - Citation validation and verification protocols
-
-### To Start Deep Research
-
-Simply say: **"Deep research [your topic]"**
-
-**The system will:**
-
-1. Ask clarifying questions if needed
-2. Deploy a GoT Controller to manage the graph
-3. Launch transformation agents (Generate, Refine, Aggregate)
-4. Explore multiple research paths with scoring
-5. Deliver the optimal research findings with complete citations
-
-**No Python setup, no API keys, no external frameworks needed** - everything runs using the Task agent system to implement proper Graph of Thoughts reasoning.
+- 当前研究问题
+- 访问的来源及其质量评分
+- 提取的声明和验证状态
+- 图状态（对于 GoT 实现）
+- 与原始计划对比的进度
+- 代理发现和综合笔记
 
 ---
 
-*For quick reference, see [CLAUDE.md](CLAUDE.md). For system architecture details, see [ARCHITECTURE.md](ARCHITECTURE.md).*
+## 准备开始
+
+此方法论提供 Graph of Thoughts 深度研究所需的一切：
+
+- **自我包含** - 无需外部文件或依赖
+- **自动执行** - 请求研究时立即部署
+- **真实 GoT 实现** - 图状态、评分、剪枝和优化
+- **使用可用工具** - WebSearch、WebFetch、Task 代理、Puppeteer
+- **透明过程** - 保存图状态和执行跟踪
+- **严格质量** - 引用验证和验证协议
+
+### 开始深度研究
+
+简单地说：**"深度研究 [你的主题]"**
+
+**系统将**:
+
+1. 如需要询问澄清问题
+2. 部署 GoT 控制器管理图
+3. 启动转换代理（Generate、Refine、Aggregate）
+4. 使用评分探索多个研究路径
+5. 带完整引用交付最优研究发现
+
+**无需 Python 设置、无 API 密钥、无外部框架** - 一切使用 Task 代理系统运行以实现适当的 Graph of Thoughts 推理。
+
+---
+
+*快速参考见 [CLAUDE.md](CLAUDE.md)。系统架构细节见 [ARCHITECTURE.md](ARCHITECTURE.md)。*

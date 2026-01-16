@@ -1,100 +1,139 @@
 # Architecture
 
-This document describes the technical architecture of the Claude Code Deep Research Agent framework.
+**Claude Code Deep Research Agent** - 系统架构文档
 
-## System Overview
+> 📘 **相关文档**: [CLAUDE.md](CLAUDE.md) | [RESEARCH_METHODOLOGY.md](RESEARCH_METHODOLOGY.md)
 
-The framework is built on Claude Code's Skills and Commands system, providing a modular architecture for conducting sophisticated multi-agent research.
+---
+
+## 设计原则
+
+### 核心理念
+
+```
+模块化 > 单体
+接口 > 实现
+组合 > 继承
+声明式 > 命令式
+```
+
+### 架构目标
+
+1. **可扩展性** - 轻松添加新的研究技能和代理类型
+2. **可维护性** - 清晰的职责分离和依赖管理
+3. **可观测性** - 完整的状态追踪和进度报告
+4. **容错性** - 检查点恢复和优雅降级
+
+---
+
+## 系统架构
+
+### 分层架构图
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        User Interface                        │
-│                    (Commands: /deep-research)                │
+│                        用户接口层                             │
+│                   (Commands: /deep-research)                │
 └──────────────────────────┬──────────────────────────────────┘
-                           │
+                           │ invokes
 ┌──────────────────────────▼──────────────────────────────────┐
-│                      Skills Layer                            │
+│                      技能层 (Skills)                         │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │   Question   │  │   Research   │  │     GoT      │     │
-│  │   Refiner    │  │   Executor   │  │  Controller  │     │
+│  │ Question     │  │ Research     │  │ Citation     │     │
+│  │ Refiner      │  │ Executor     │  │ Validator    │     │
 │  └──────────────┘  └──────────────┘  └──────────────┘     │
-│  ┌──────────────┐  ┌──────────────┐                        │
-│  │  Citation    │  │ Synthesizer  │                        │
-│  │  Validator   │  │              │                        │
-│  └──────────────┘  └──────────────┘                        │
+│  (薄封装 - 输入验证 + 代理调用)                               │
 └──────────────────────────┬──────────────────────────────────┘
-                           │
+                           │ invokes
 ┌──────────────────────────▼──────────────────────────────────┐
-│                    Multi-Agent Layer                         │
+│                   代理层 (Agents)                            │
 │  ┌────────────┐  ┌────────────┐  ┌────────────┐           │
-│  │ Web Search │  │ Academic   │  │   Cross-   │           │
-│  │  Agents    │  │  Agents    │  │ Reference  │           │
-│  │   (3-5)    │  │   (1-2)    │  │  Agent (1) │           │
+│  │ Coordinator│  │ Phase-N    │  │ Support    │           │
+│  │ Workflow   │  │ Workflows  │  │ Agents     │           │
 │  └────────────┘  └────────────┘  └────────────┘           │
+│  (使用 general-purpose 内置代理类型)                          │
 └──────────────────────────┬──────────────────────────────────┘
-                           │
+                           │ uses
 ┌──────────────────────────▼──────────────────────────────────┐
-│                      Tools Layer                             │
-│  WebSearch │ WebFetch │ Task │ Read/Write │ TodoWrite      │
+│                   基础设施层 (Infrastructure)                 │
+│  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │ MCP Tools   │  │ State Mgmt   │  │ Token Budget │      │
+│  │ (数据处理)   │  │ (SQLite)     │  │ (资源控制)    │      │
+│  └─────────────┘  └──────────────┘  └──────────────┘      │
+│  ┌──────────────────────────────────────────────────┐      │
+│  │         RecoveryHandler + ContentCompressor      │      │
+│  └──────────────────────────────────────────────────┘      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Directory Structure
+---
+
+## 目录结构
 
 ```
 .
 ├── .claude/
-│   ├── commands/              # User-facing command shortcuts
+│   ├── commands/                  # 用户命令 (快捷方式)
 │   │   ├── deep-research.md
 │   │   ├── refine-question.md
 │   │   ├── plan-research.md
 │   │   ├── synthesize-findings.md
 │   │   └── validate-citations.md
 │   │
-│   ├── skills/                # Modular capabilities
+│   ├── skills/                    # 技能定义 (可复用能力)
 │   │   ├── question-refiner/
 │   │   │   ├── SKILL.md
 │   │   │   ├── instructions.md
 │   │   │   └── examples.md
 │   │   ├── research-executor/
-│   │   ├── got-controller/
-│   │   ├── citation-validator/
-│   │   └── synthesizer/
+│   │   └── citation-validator/
 │   │
-│   └── settings.local.json    # Tool permissions
+│   ├── agents/                    # 代理工作流定义 (参考文档)
+│   │   ├── coordinator/
+│   │   ├── phase-1-refinement/
+│   │   ├── phase-2-planning/
+│   │   ├── phase-3-execution/
+│   │   ├── phase-4-processing/
+│   │   ├── phase-5-synthesis/
+│   │   ├── phase-6-validation/
+│   │   ├── phase-7-output/
+│   │   ├── synthesizer-agent/
+│   │   └── red-team-agent/
+│   │
+│   └── mcp-server/                # MCP 服务器 (基础设施)
+│       ├── src/
+│       │   ├── tools/             # 工具实现
+│       │   ├── state/             # 状态管理
+│       │   └── utils/             # 工具函数
+│       └── state/
+│           └── research_state.db  # SQLite 数据库
 │
-├── RESEARCH/                  # Research outputs
+├── RESEARCH/                      # 研究输出目录
 │   └── [topic_name]/
 │       ├── README.md
 │       ├── executive_summary.md
-│       ├── full_report.md
-│       ├── data/
-│       ├── visuals/
-│       ├── sources/
-│       ├── research_notes/
-│       └── appendices/
+│       └── ...
 │
-├── docs/
-│   └── reference/
-│       └── skills-guide.md    # General skills reference
-│
-├── CLAUDE.md                  # Claude Code quick reference
-├── ARCHITECTURE.md            # This file
-├── RESEARCH_METHODOLOGY.md    # Research implementation guide
-└── README.md                  # User-facing documentation
+├── CLAUDE.md                      # 快速参考
+├── ARCHITECTURE.md                # 本文档
+├── RESEARCH_METHODOLOGY.md        # 研究方法论
+├── README.md                      # 用户指南
+└── FAQ.md                         # 常见问题
 ```
 
-## Skills System
+---
 
-### What are Skills?
+## 技能系统
 
-Skills are modular, reusable capabilities that Claude Code can execute. Each skill is a self-contained unit with:
+### 什么是技能？
 
-1. **SKILL.md** - Metadata and description (YAML frontmatter)
-2. **instructions.md** - Detailed implementation guidance
-3. **examples.md** - Usage examples and patterns
+技能是模块化、可复用的能力单元，每个技能包含：
 
-### Skill Structure
+- **SKILL.md** - 元数据和描述 (YAML frontmatter)
+- **instructions.md** - 详细实现指南
+- **examples.md** - 使用示例
+
+### 技能结构
 
 ```yaml
 # SKILL.md frontmatter
@@ -105,414 +144,469 @@ author: Your Name
 tags: [research, analysis]
 ```
 
-### Available Skills
+### 核心技能
 
-#### 1. question-refiner
+| 技能 | 用途 | 触发方式 |
+|------|------|----------|
+| `question-refiner` | 问题结构化 | 用户调用、Phase 1 自动 |
+| `research-planner` | 创建执行计划 | 用户调用、Phase 2 自动 |
+| `research-executor` | 执行7阶段工作流 | 用户调用 `/deep-research` |
+| `citation-validator` | 验证引用质量 | 用户调用、Phase 6 自动 |
 
-**Purpose**: Transform vague research questions into structured prompts
+### 技能设计模式
 
-**Input**: Raw user question
-**Output**: Structured research prompt with:
+```typescript
+// 技能作为薄封装层
+class Skill {
+  async execute(input: UserInput): Promise<SkillOutput> {
+    // 1. 验证输入
+    const validated = this.validate(input);
 
-- Clear research objectives
-- Scope boundaries
-- Expected deliverables
-- Success criteria
+    // 2. 调用通用代理
+    const agent = new GeneralPurposeAgent();
+    agent.setInstructions(this.loadWorkflow());
 
-**Location**: `.claude/skills/question-refiner/`
-
-#### 2. research-executor
-
-**Purpose**: Execute complete 7-phase research workflow
-
-**Phases**:
-
-1. Question Scoping
-2. Retrieval Planning
-3. Iterative Querying
-4. Source Triangulation
-5. Knowledge Synthesis
-6. Quality Assurance
-7. Output & Packaging
-
-**Location**: `.claude/skills/research-executor/`
-
-#### 3. got-controller
-
-**Purpose**: Manage Graph of Thoughts for complex research
-
-**Operations**:
-
-- Generate(k): Create k parallel research paths
-- Aggregate(k): Merge k findings
-- Refine(1): Improve existing finding
-- Score: Rate quality (0-10)
-- KeepBestN(n): Prune to top n nodes
-
-**Location**: `.claude/skills/got-controller/`
-
-#### 4. citation-validator
-
-**Purpose**: Verify citation accuracy and source quality
-
-**Checks**:
-
-- Citation completeness
-- Source accessibility
-- Quality ratings (A-E scale)
-- Cross-reference validation
-
-**Location**: `.claude/skills/citation-validator/`
-
-#### 5. synthesizer
-
-**Purpose**: Combine findings from multiple agents
-
-**Process**:
-
-- Collect agent outputs
-- Identify overlaps and contradictions
-- Resolve conflicts
-- Create unified narrative
-- Maintain source attribution
-
-**Location**: `.claude/skills/synthesizer/`
-
-## Commands System
-
-### What are Commands?
-
-Commands are user-facing shortcuts that invoke skills with predefined parameters. They provide a simple interface for complex operations.
-
-### Command Structure
-
-```markdown
-# Command: /command-name
-
-## Description
-Brief description of what this command does
-
-## Usage
-/command-name [arguments]
-
-## Examples
-/command-name example argument
-```
-
-### Available Commands
-
-| Command | Invokes Skill | Description |
-|---------|---------------|-------------|
-| `/deep-research` | research-executor | Full 7-phase workflow |
-| `/refine-question` | question-refiner | Question transformation |
-| `/plan-research` | research-executor (phase 2) | Create execution plan |
-| `/synthesize-findings` | synthesizer | Combine agent outputs |
-| `/validate-citations` | citation-validator | Verify citations |
-
-## Multi-Agent Architecture
-
-### Agent Types
-
-#### Web Research Agents (3-5 agents)
-
-**Focus**: Current information, trends, news
-**Tools**: WebSearch, WebFetch
-**Output**: Structured summaries with URLs
-
-#### Academic/Technical Agents (1-2 agents)
-
-**Focus**: Research papers, specifications
-**Tools**: WebSearch (academic sources), WebFetch
-**Output**: Technical analysis with citations
-
-#### Cross-Reference Agent (1 agent)
-
-**Focus**: Fact-checking, verification
-**Tools**: WebSearch, WebFetch
-**Output**: Confidence ratings for claims
-
-### Agent Deployment
-
-Agents are deployed in parallel using multiple Task tool calls in a single response:
-
-```
-Task 1: Web Research Agent - Current trends
-Task 2: Web Research Agent - Market analysis
-Task 3: Academic Agent - Technical foundations
-Task 4: Cross-Reference Agent - Fact verification
-```
-
-### Agent Communication
-
-Agents work independently but share findings through:
-
-1. Structured output format
-2. Common citation standards
-3. Centralized result aggregation
-4. Conflict resolution protocol
-
-## Graph of Thoughts Implementation
-
-### Graph Structure
-
-```json
-{
-  "nodes": {
-    "n1": {
-      "text": "Research finding",
-      "score": 8.5,
-      "type": "root|generate|aggregate|refine",
-      "depth": 0,
-      "sources": ["url1", "url2"]
-    }
-  },
-  "edges": [
-    {"from": "n1", "to": "n2", "operation": "Generate"}
-  ],
-  "frontier": ["n2", "n3"],
-  "budget": {
-    "tokens_used": 15000,
-    "max_tokens": 50000
+    // 3. 返回结果
+    return await agent.run(validated);
   }
 }
 ```
 
-### Transformation Operations
-
-**Generate(k)**
-
-- Creates k new research paths from parent
-- Each path explores different angle
-- Returns k nodes with scores
-
-**Aggregate(k)**
-
-- Merges k nodes into single synthesis
-- Resolves contradictions
-- Preserves all citations
-- Returns 1 node with higher score
-
-**Refine(1)**
-
-- Improves existing node quality
-- Fact-checks claims
-- Enhances clarity
-- Returns refined node
-
-**Score**
-
-- Evaluates node quality (0-10)
-- Based on: citations, accuracy, completeness, coherence
-- Guides exploration strategy
-
-**KeepBestN(n)**
-
-- Prunes graph to top n nodes per depth
-- Manages token budget
-- Focuses on high-quality paths
-
-### Graph Traversal Strategy
-
-```
-Depth 0-2: Aggressive Generate(3) - Explore search space
-Depth 2-3: Mixed Generate + Refine - Balance exploration/exploitation
-Depth 3-4: Aggregate + Refine - Synthesize best paths
-Termination: max_score > 9 OR depth > 4
-```
-
-## Tool Permissions
-
-Configured in `.claude/settings.local.json`:
-
-```json
-{
-  "tools": {
-    "WebSearch": {
-      "enabled": true,
-      "description": "General web searches"
-    },
-    "WebFetch": {
-      "enabled": true,
-      "description": "Extract content from URLs"
-    },
-    "Task": {
-      "enabled": true,
-      "description": "Deploy autonomous agents"
-    },
-    "TodoWrite": {
-      "enabled": true,
-      "description": "Track research progress"
-    },
-    "Read": {
-      "enabled": true,
-      "description": "Read files"
-    },
-    "Write": {
-      "enabled": true,
-      "description": "Write files"
-    }
-  }
-}
-```
-
-## Output Management
-
-### File Organization
-
-All research outputs go to `RESEARCH/[topic_name]/`:
-
-```
-RESEARCH/[topic_name]/
-├── README.md                    # Navigation and overview
-├── executive_summary.md         # 1-2 page key findings
-├── full_report.md               # Complete analysis (20-50 pages)
-├── data/
-│   └── statistics.md            # Key numbers and facts
-├── visuals/
-│   └── descriptions.md          # Chart/graph descriptions
-├── sources/
-│   ├── bibliography.md          # Complete citations
-│   └── source_quality_table.md  # A-E quality ratings
-├── research_notes/
-│   └── agent_findings_summary.md # Raw agent outputs
-└── appendices/
-    ├── methodology.md           # Research methods used
-    └── limitations.md           # Unknowns and gaps
-```
-
-### Document Splitting Strategy
-
-To avoid context limits:
-
-- Break reports into sections (< 10,000 words each)
-- Separate data files from narrative
-- Keep agent outputs in research_notes/
-- Link documents with cross-references
-
-## Citation System
-
-### Citation Format
-
-**Inline**: `(Author, Year, p. XX)`
-**Bibliography**: Full citation with URL/DOI
-
-### Source Quality Ratings
-
-- **A**: Peer-reviewed RCTs, systematic reviews, meta-analyses
-- **B**: Cohort studies, clinical guidelines, reputable analysts
-- **C**: Expert opinion, case reports, mechanistic studies
-- **D**: Preprints, preliminary research, blogs
-- **E**: Anecdotal, theoretical, speculative
-
-### Validation Process
-
-1. Check citation completeness
-2. Verify source accessibility
-3. Cross-reference claims
-4. Rate source quality
-5. Flag unreliable sources
-
-## Extending the Framework
-
-### Adding New Skills
-
-1. Create skill directory in `.claude/skills/`
-2. Add SKILL.md with YAML frontmatter
-3. Write instructions.md with implementation details
-4. Provide examples.md with usage patterns
-5. Test with diverse research topics
-6. Update documentation
-
-### Adding New Commands
-
-1. Create command file in `.claude/commands/`
-2. Define command syntax and arguments
-3. Map to appropriate skill(s)
-4. Add usage examples
-5. Update README.md
-
-### Adding New Agent Types
-
-1. Define agent role and focus
-2. Specify required tools
-3. Create agent prompt template
-4. Define output format
-5. Integrate with synthesizer
-6. Test with multi-agent deployment
-
-## Performance Considerations
-
-### Token Budget Management
-
-- Track tokens used per agent
-- Set max_tokens limit (default: 50,000)
-- Prune low-scoring branches early
-- Cache intermediate results
-
-### Parallel Execution
-
-- Deploy agents in single response
-- Use multiple Task calls
-- Avoid sequential dependencies
-- Aggregate results efficiently
-
-### Quality vs Speed Tradeoffs
-
-- Quick research: 3-4 agents, depth 2
-- Standard research: 5-6 agents, depth 3
-- Comprehensive research: 6-8 agents, depth 4
-
-## Error Handling
-
-### Common Issues
-
-1. **Agent timeout**: Reduce scope or split task
-2. **Citation missing**: Flag for manual review
-3. **Source inaccessible**: Find alternative source
-4. **Contradictory findings**: Document in report
-5. **Token limit exceeded**: Split into smaller tasks
-
-### Recovery Strategies
-
-- Save intermediate results
-- Resume from last checkpoint
-- Retry failed operations
-- Escalate to user when blocked
-
-## Security Considerations
-
-### Data Privacy
-
-- No persistent storage of user data
-- Research outputs saved locally only
-- No external API calls (except web search)
-
-### Source Validation
-
-- Verify URL authenticity
-- Check for malicious content
-- Validate SSL certificates
-- Flag suspicious sources
-
-## Future Enhancements
-
-### Planned Features
-
-- [ ] Visual graph explorer for GoT
-- [ ] Interactive research dashboard
-- [ ] Real-time collaboration support
-- [ ] Custom agent templates
-- [ ] Advanced citation management
-- [ ] Multi-language support
-
-### Research Areas
-
-- Improved scoring functions
-- Better conflict resolution
-- Automated fact-checking
-- Source credibility prediction
-- Dynamic agent allocation
+**关键原则**:
+- 技能不包含业务逻辑 → 委托给代理
+- 技能专注于接口和验证
+- 工作流定义存储在 `.claude/agents/` 中
 
 ---
 
-**For implementation details, see [RESEARCH_METHODOLOGY.md](RESEARCH_METHODOLOGY.md)**
+## 代理工作流系统
+
+### 代理类型映射
+
+```
+.claude/agents/[workflow-name]/AGENT.md  →  工作流定义文档
+                                           ↓
+                         不是实际的代理类型
+                                           ↓
+           Claude Code 的 general-purpose 内置代理类型
+                                           ↓
+                      技能嵌入工作流指令
+```
+
+### 工作流定义目录
+
+| 工作流 | 路径 | 用途 |
+|--------|------|------|
+| **协调器** | `agents/coordinator/AGENT.md` | 轻量级编排，委托给阶段工作流 |
+| **阶段1** | `agents/phase-1-refinement/AGENT.md` | 问题澄清和结构化 |
+| **阶段2** | `agents/phase-2-planning/AGENT.md` | 子主题分解和代理规划 |
+| **阶段3** | `agents/phase-3-execution/AGENT.md` | 并行代理部署和收集 |
+| **阶段4** | `agents/phase-4-processing/AGENT.md` | MCP 基础事实/实体提取 |
+| **阶段5** | `agents/phase-5-synthesis/AGENT.md` | 知识综合与引用 |
+| **阶段6** | `agents/phase-6-validation/AGENT.md` | 质量验证和红队评审 |
+| **阶段7** | `agents/phase-7-output/AGENT.md` | 最终交付物生成 |
+
+### 支持代理工作流
+
+| 工作流 | 路径 | 自主性 |
+|--------|------|--------|
+| **综合器** | `agents/synthesizer-agent/AGENT.md` | 高 |
+| **红队** | `agents/red-team-agent/AGENT.md` | 高 |
+| **GoT** | `agents/got-agent/AGENT.md` | 高 |
+| **本体侦察** | `agents/ontology-scout-agent/AGENT.md` | 中 |
+
+### 代理通信协议
+
+```typescript
+interface AgentMessage {
+  from: string;           // 发送者 ID
+  to: string;             // 接收者 ID
+  type: 'request' | 'response' | 'event';
+  payload: {
+    task: string;         // 任务描述
+    context: any;         // 上下文数据
+    citations: string[];  // 来源列表
+  };
+  timestamp: number;
+}
+```
+
+---
+
+## MCP 工具架构
+
+### 工具分类
+
+```
+MCP Server (.claude/mcp-server/)
+├── 核心工具 (5)
+│   ├── fact-extract      # 事实提取
+│   ├── entity-extract    # 实体提取
+│   ├── citation-validate # 引用验证
+│   ├── source-rate       # 来源评级
+│   └── conflict-detect   # 矛盾检测
+│
+├── 批处理工具 (5)
+│   ├── batch-fact-extract
+│   ├── batch-entity-extract
+│   ├── batch-citation-validate
+│   ├── batch-source-rate
+│   └── batch-conflict-detect
+│
+└── 状态工具 (11)
+    ├── create_research_session
+    ├── update_session_status
+    ├── get_session_info
+    ├── register_agent
+    ├── update_agent_status
+    ├── get_active_agents
+    ├── update_current_phase
+    ├── get_current_phase
+    ├── checkpoint_phase
+    ├── log_activity
+    └── render_progress
+```
+
+### 工具接口设计
+
+```typescript
+// 统一提取接口
+interface ExtractResult {
+  mode: 'fact' | 'entity' | 'all';
+  items: ExtractedItem[];
+  metadata: {
+    source_url: string;
+    extracted_at: string;
+    confidence: number;
+  };
+}
+
+// 统一验证接口
+interface ValidationResult {
+  mode: 'citation' | 'source' | 'all';
+  valid: boolean;
+  issues: ValidationIssue[];
+  quality_rating: 'A' | 'B' | 'C' | 'D' | 'E';
+}
+```
+
+### 状态管理架构
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   UnifiedStateManager                        │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │              SQLite (Single Source of Truth)          │   │
+│  │  • sessions  • agents  • phases  • activity_log      │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                              │                                │
+│         ┌────────────────────┼────────────────────┐          │
+│         ▼                    ▼                    ▼          │
+│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐  │
+│  │ Event       │     │ Progress    │     │ Recovery    │  │
+│  │ Emitter     │     │ Renderer    │  │ Handler     │  │
+│  └─────────────┘     └─────────────┘     └─────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**数据库模式** (简化):
+
+```sql
+CREATE TABLE sessions (
+  id TEXT PRIMARY KEY,
+  topic TEXT,
+  status TEXT,
+  created_at TIMESTAMP,
+  metadata JSON
+);
+
+CREATE TABLE agents (
+  id TEXT PRIMARY KEY,
+  session_id TEXT,
+  type TEXT,
+  status TEXT,
+  FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
+
+CREATE TABLE phases (
+  session_id TEXT,
+  phase_number INTEGER,
+  status TEXT,
+  checkpoint_data JSON,
+  PRIMARY KEY (session_id, phase_number)
+);
+
+CREATE TABLE activity_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT,
+  phase INTEGER,
+  event_type TEXT,
+  message TEXT,
+  timestamp TIMESTAMP
+);
+```
+
+---
+
+## 令牌管理
+
+### TokenBudgetManager
+
+```typescript
+interface TokenBudget {
+  max_tokens: number;        // 总预算 (默认: 500K)
+  phase_allocations: {       // 阶段分配
+    [phase: number]: number
+  };
+  warning_threshold: 0.8;    // 警告阈值
+  hard_limit: boolean;       // 硬限制开关
+}
+
+class TokenBudgetManager {
+  allocate(sessionId: string, plan: ResearchPlan): void;
+  checkUsage(sessionId: string, phase: number): BudgetStatus;
+  enforceLimit(sessionId: string): boolean;
+}
+```
+
+### 预算分配策略
+
+```
+Phase 1 (Question): 5%   → 25K tokens
+Phase 2 (Planning):  10%  → 50K tokens
+Phase 3 (Querying):  40%  → 200K tokens
+Phase 4 (Process):   15%  → 75K tokens
+Phase 5 (Synthesis): 20%  → 100K tokens
+Phase 6 (Validate):  7%   → 35K tokens
+Phase 7 (Output):    3%   → 15K tokens
+```
+
+---
+
+## 恢复系统
+
+### RecoveryHandler
+
+```typescript
+interface RecoveryPlan {
+  can_resume: boolean;
+  last_checkpoint: PhaseCheckpoint;
+  rerun_phases: number[];
+  estimated_rework_cost: number;
+}
+
+class RecoveryHandler {
+  detectInterruption(sessionId: string): boolean;
+  generateRecoveryPlan(sessionId: string): RecoveryPlan;
+  executeRecovery(sessionId: string): Promise<void>;
+}
+```
+
+### 检查点策略
+
+```
+Phase Checkpoints:
+├── Phase 1: After structured prompt created
+├── Phase 2: After research plan approved
+├── Phase 3: After all agents complete
+├── Phase 4: After MCP processing complete
+├── Phase 5: After synthesis draft created
+├── Phase 6: After validation passed
+└── Phase 7: After all outputs generated
+```
+
+---
+
+## 扩展点
+
+### 添加新技能
+
+1. 创建技能目录 `.claude/skills/new-skill/`
+2. 添加 SKILL.md (元数据)
+3. 编写 instructions.md (实现指南)
+4. 提供 examples.md (使用模式)
+5. 测试与集成
+
+### 添加新命令
+
+1. 创建命令文件 `.claude/commands/new-command.md`
+2. 定义命令语法和参数
+3. 映射到适当的技能
+4. 更新 README.md
+
+### 添加新代理工作流
+
+1. 创建工作流定义 `.claude/agents/new-workflow/AGENT.md`
+2. 定义代理角色和焦点
+3. 指定所需工具
+4. 定义输出格式
+5. 集成到协调器
+
+---
+
+## 架构决策记录 (ADR)
+
+### ADR-001: 使用 SQLite 作为状态存储
+
+**状态**: 已接受
+
+**上下文**: 需要持久化研究状态、代理信息和进度跟踪。
+
+**决策**: 使用 SQLite 而非 JSON 文件。
+
+**理由**:
+- ACID 事务保证
+- 并发安全
+- 查询能力
+- 无需外部依赖
+
+**后果**:
+- ✅ 可靠的状态管理
+- ✅ 简单的备份/恢复
+- ⚠️ 需要数据库迁移策略
+
+### ADR-002: 技能作为薄封装层
+
+**状态**: 已接受
+
+**上下文**: 需要组织研究执行逻辑。
+
+**决策**: 技能仅负责输入验证和代理调用，业务逻辑在代理工作流中。
+
+**理由**:
+- 清晰的职责分离
+- 代理工作流可独立测试
+- 技能保持简单可维护
+
+**后果**:
+- ✅ 模块化架构
+- ✅ 易于扩展
+- ⚠️ 需要理解两层间接
+
+### ADR-003: 使用 general-purpose 代理类型
+
+**状态**: 已接受
+
+**上下文**: 需要执行复杂的多阶段研究工作流。
+
+**决策**: 使用 Claude Code 内置的 general-purpose 代理，嵌入工作流指令。
+
+**理由**:
+- 无需自定义代理实现
+- 工作流定义可作为文档
+- 利用内置能力
+
+**后果**:
+- ✅ 简化实现
+- ✅ 自带工具访问
+- ⚠️ 依赖指令质量
+
+---
+
+## 性能考虑
+
+### 并行执行
+
+```typescript
+// 部署多个代理并行执行
+const agents = [
+  deployAgent('web-research-1'),
+  deployAgent('web-research-2'),
+  deployAgent('academic-1'),
+  deployAgent('cross-reference')
+];
+
+// 等待所有完成
+const results = await Promise.all(agents);
+```
+
+### 缓存策略
+
+```
+Cache Levels:
+├── L1: 内存缓存 (会话内)
+├── L2: MCP 工具缓存 (跨会话)
+└── L3: 内容压缩 (长文本)
+```
+
+### 质量与速度权衡
+
+| 模式 | 代理数 | 深度 | 预期时间 | 质量 |
+|------|--------|------|----------|------|
+| 快速研究 | 3-4 | 2 | 5-10 分钟 | 中 |
+| 标准研究 | 5-6 | 3 | 15-30 分钟 | 高 |
+| 全面研究 | 6-8 | 4 | 30-60 分钟 | 最高 |
+
+---
+
+## 安全考虑
+
+### 数据隐私
+
+- 无用户数据持久化到外部
+- 研究输出仅本地保存
+- 无外部 API 调用 (除网络搜索)
+
+### 来源验证
+
+- 验证 URL 真实性
+- 检查恶意内容
+- 验证 SSL 证书
+- 标记可疑来源
+
+---
+
+## 故障处理
+
+### 常见问题
+
+| 问题 | 检测 | 恢复 |
+|------|------|------|
+| 代理超时 | 令牌使用停滞 | 从检查点恢复 |
+| 引用缺失 | 验证失败 | 标记人工审核 |
+| 矛盾发现 | conflict-detect | 记录到报告 |
+| 令牌超限 | BudgetManager | 分割任务 |
+
+### 恢复策略
+
+```typescript
+async function handleError(sessionId: string, error: Error) {
+  // 1. 记录错误
+  await logActivity(sessionId, phase, 'error', error.message);
+
+  // 2. 生成恢复计划
+  const plan = await recoveryHandler.generateRecoveryPlan(sessionId);
+
+  // 3. 执行恢复
+  if (plan.can_resume) {
+    await executeRecovery(sessionId);
+  } else {
+    await escalateToUser(sessionId, error);
+  }
+}
+```
+
+---
+
+## 未来增强
+
+### 计划功能
+
+- [ ] 可视化 GoT 图探索器
+- [ ] 交互式研究仪表板
+- [ ] 实时协作支持
+- [ ] 自定义代理模板
+- [ ] 高级引用管理
+- [ ] 多语言支持
+
+### 研究领域
+
+- 改进评分函数
+- 更好的冲突解决
+- 自动事实核查
+- 来源可信度预测
+- 动态代理分配
+
+---
+
+**完整实现细节见 [RESEARCH_METHODOLOGY.md](RESEARCH_METHODOLOGY.md)**
