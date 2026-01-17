@@ -1,5 +1,5 @@
 -- Deep Research Framework - Database Schema
--- Version: 2.1
+-- Version: 4.0 (v3.1 + streaming data ingestion)
 -- SQLite with WAL mode
 
 -- ==================== Core Tables ====================
@@ -76,6 +76,27 @@ CREATE TABLE IF NOT EXISTS phase_checkpoints (
 );
 
 CREATE INDEX IF NOT EXISTS idx_checkpoints_session ON phase_checkpoints(session_id, phase_number);
+
+-- ==================== v4.0 Streaming Data Ingestion ====================
+
+-- Ingested Data Queue (v4.0)
+CREATE TABLE IF NOT EXISTS ingested_data (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    data_type TEXT NOT NULL
+        CHECK (data_type IN ('raw_text', 'web_page', 'document', 'fact', 'entity')),
+    data TEXT NOT NULL,  -- JSON object
+    source_url TEXT,
+    status TEXT DEFAULT 'pending'
+        CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    processed_at TEXT,
+    error_message TEXT,
+    FOREIGN KEY (session_id) REFERENCES research_sessions(session_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ingested_session ON ingested_data(session_id);
+CREATE INDEX IF NOT EXISTS idx_ingested_status ON ingested_data(session_id, status);
 
 -- ==================== Graph of Thoughts ====================
 

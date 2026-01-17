@@ -21,10 +21,9 @@ import * as path from 'path';
 import { logger } from '../utils/logger.js';
 import { ValidationError } from '../utils/errors.js';
 import { extract } from './extract.js';
-import { validate } from './validate.js';
 import { conflictDetect } from './conflict-detect.js';
 
-interface AutoProcessInput {
+export interface AutoProcessInput {
   session_id: string;
   input_dir: string;
   output_dir: string;
@@ -178,13 +177,13 @@ export async function autoProcessDataHandler(input: AutoProcessInput): Promise<a
       }
 
       // Validate citations
+      // NOTE: Citation validation requires pre-extracted citations array.
+      // This feature needs a citation extraction step before validation can work.
+      // For now, we skip citation validation as the validate() function expects
+      // a 'citations' array, not raw text content.
       if (operations.includes('citation_validation')) {
-        const citationResult = await validate({
-          mode: 'citation',
-          text: content
-        });
-        const validated = JSON.parse(citationResult.content[0].text);
-        allCitations.push(...(validated.citations || []));
+        // TODO: Implement citation extraction from text first
+        logger.info('Citation validation skipped - requires citation extraction implementation');
       }
 
     } catch (error) {

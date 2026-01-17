@@ -71,14 +71,6 @@ import {
   getActiveAgentsHandler,
 } from './tools/agent-tools.js';
 
-// Phase tracking tools
-import {
-  phaseTools,
-  updateCurrentPhaseHandler,
-  getCurrentPhaseHandler,
-  checkpointPhaseHandler,
-} from './tools/phase-tools.js';
-
 // Logging tools
 import { loggingTools, logActivityHandler } from './tools/activity-logger.js';
 import { renderingTools, renderProgressHandler } from './tools/progress-renderer.js';
@@ -94,8 +86,21 @@ import {
 // Auto-process data tool
 import {
   autoProcessDataTool,
-  autoProcessDataHandler
+  autoProcessDataHandler,
+  AutoProcessInput
 } from './tools/auto-process-data.js';
+
+// State machine tools (v4.0)
+import {
+  stateMachineTools,
+  getNextActionHandler
+} from './tools/state-machine-tools.js';
+
+// Data ingestion tools (v4.0)
+import {
+  dataIngestionTools,
+  ingestDataHandler
+} from './tools/data-ingestion.js';
 
 // Create server instance
 const server = new Server(
@@ -328,7 +333,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       // === State Management Tools ===
       ...stateTools,
       ...agentTools,
-      ...phaseTools,
       // === Logging Tools ===
       ...loggingTools,
       ...renderingTools,
@@ -353,12 +357,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       // === State Management Tools ===
       ...stateTools,
       ...agentTools,
-      ...phaseTools,
       ...loggingTools,
       ...renderingTools,
 
       // === GoT Tools ===
       ...gotTools,
+
+      // === State Machine Tools (v4.0) ===
+      ...stateMachineTools,
+
+      // === Data Ingestion Tools (v4.0) ===
+      ...dataIngestionTools,
 
       // === Auto-Process Data Tool (v3.1) ===
       autoProcessDataTool,
@@ -450,22 +459,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [{ type: 'text', text: JSON.stringify(getActiveAgentsHandler(args), null, 2) }],
         };
 
-      // === Phase Tracking Tools ===
-      case 'update_current_phase':
-        return {
-          content: [{ type: 'text', text: JSON.stringify(updateCurrentPhaseHandler(args), null, 2) }],
-        };
-
-      case 'get_current_phase':
-        return {
-          content: [{ type: 'text', text: JSON.stringify(getCurrentPhaseHandler(args), null, 2) }],
-        };
-
-      case 'checkpoint_phase':
-        return {
-          content: [{ type: 'text', text: JSON.stringify(checkpointPhaseHandler(args), null, 2) }],
-        };
-
       // === Logging Tools ===
       case 'log_activity':
         return {
@@ -500,10 +493,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [{ type: 'text', text: JSON.stringify(await aggregatePathsHandler(args), null, 2) }],
         };
 
+      // === State Machine Tools (v4.0) ===
+      case 'get_next_action':
+        return {
+          content: [{ type: 'text', text: JSON.stringify(getNextActionHandler(args), null, 2) }],
+        };
+
+      // === Data Ingestion Tools (v4.0) ===
+      case 'ingest_data':
+        return {
+          content: [{ type: 'text', text: JSON.stringify(await ingestDataHandler(args), null, 2) }],
+        };
+
       // === Auto-Process Data Tool (v3.1) ===
       case 'auto_process_data':
         return {
-          content: [{ type: 'text', text: JSON.stringify(await autoProcessDataHandler(args as AutoProcessInput), null, 2) }],
+          content: [{ type: 'text', text: JSON.stringify(await autoProcessDataHandler(args as unknown as AutoProcessInput), null, 2) }],
         };
 
       default:

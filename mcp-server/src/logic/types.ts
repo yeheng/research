@@ -1,7 +1,8 @@
 /**
- * Graph of Thoughts (GoT) Type Definitions (v3.1)
+ * Graph of Thoughts (GoT) Type Definitions (v4.0)
  *
  * Implements the Graph of Thoughts framework for research path management
+ * Enhanced with state machine support
  */
 
 export interface ResearchPath {
@@ -9,8 +10,8 @@ export interface ResearchPath {
   query: string;
   focus?: string;  // Path focus area (e.g., "Academic Research", "Industry Practices")
   steps: ResearchStep[];
-  score: number;
-  status: 'active' | 'completed' | 'pruned';
+  score?: number;
+  status: 'pending' | 'active' | 'completed' | 'pruned';
   metadata: PathMetadata;
 }
 
@@ -73,4 +74,34 @@ export interface Conflict {
   source2?: string;
   type?: string;
   severity?: 'low' | 'medium' | 'high';
+}
+
+// === v4.0 New Types ===
+
+/**
+ * Graph state for state machine
+ */
+export interface GraphState {
+  session_id: string;
+  iteration: number;
+  max_iterations: number;
+  paths: ResearchPath[];
+  confidence: number;
+  aggregated: boolean;
+  budget_exhausted: boolean;
+  current_findings?: any;
+  total_facts: number;
+  cited_facts: number;
+  sources: Array<{ quality_score: number }>;
+  total_topics: number;
+  covered_topics: number;
+}
+
+/**
+ * Next action returned by state machine
+ */
+export interface NextAction {
+  action: 'generate' | 'execute' | 'score' | 'prune' | 'aggregate' | 'synthesize';
+  params: Record<string, any>;
+  reasoning: string;
 }
