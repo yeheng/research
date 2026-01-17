@@ -91,6 +91,12 @@ import {
   aggregatePathsHandler
 } from './tools/got-tools.js';
 
+// Auto-process data tool
+import {
+  autoProcessDataTool,
+  autoProcessDataHandler
+} from './tools/auto-process-data.js';
+
 // Create server instance
 const server = new Server(
   {
@@ -353,6 +359,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
       // === GoT Tools ===
       ...gotTools,
+
+      // === Auto-Process Data Tool (v3.1) ===
+      autoProcessDataTool,
     ],
   };
 });
@@ -489,6 +498,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'aggregate_paths':
         return {
           content: [{ type: 'text', text: JSON.stringify(await aggregatePathsHandler(args), null, 2) }],
+        };
+
+      // === Auto-Process Data Tool (v3.1) ===
+      case 'auto_process_data':
+        return {
+          content: [{ type: 'text', text: JSON.stringify(await autoProcessDataHandler(args as AutoProcessInput), null, 2) }],
         };
 
       default:

@@ -43,12 +43,22 @@
     "PostToolUse": [
       {
         "matcher": "mcp__deep-research__.*",
-        "command": "node .claude/hooks/auto-logger.js"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/auto-logger.js"
+          }
+        ]
       }
     ],
     "SessionStart": [
       {
-        "command": "node .claude/hooks/restore-context.js"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/restore-context.js"
+          }
+        ]
       }
     ]
   }
