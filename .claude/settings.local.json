@@ -1,0 +1,55 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(rm:*)",
+      "Bash(cp:*)",
+      "Bash(python3:*)",
+      "mcp__web-search-prime__webSearchPrime",
+      "WebSearch",
+      "mcp__web-reader__webReader",
+      "Skill(deep-research-skill)",
+      "Skill(research-executor)",
+      "Bash(find:*)",
+      "Bash(npm run build:*)",
+      "Bash(node test-tools.js:*)",
+      "Bash(test:*)",
+      "Bash(wc:*)",
+      "Bash(for agent in /Users/yeheng/workspaces/research/template/.claude/agents/*/AGENT.md:*)",
+      "Bash(done:*)",
+      "Bash(grep:*)",
+      "Bash(for:*)",
+      "Bash(npm test:*)",
+      "Bash(tree:*)",
+      "Bash(node:*)",
+      "Bash(sqlite3:*)",
+      "Bash(chmod:*)",
+      "Bash(npm install:*)",
+      "Bash(:*::*)"
+    ]
+  },
+  "outputStyle": "Structural Thinking",
+  "research": {
+    "default_output_dir": "RESEARCH",
+    "max_agents": 8,
+    "default_quality_threshold": 8,
+    "citation_style": "inline-with-url"
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "mcp__deep-research__.*",
+        "command": "node .claude/hooks/auto-logger.js"
+      }
+    ],
+    "SessionStart": [
+      {
+        "command": "node .claude/hooks/restore-context.js"
+      }
+    ]
+  }
+}
