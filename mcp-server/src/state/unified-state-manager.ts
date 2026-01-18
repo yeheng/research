@@ -5,11 +5,13 @@
  * - SQLite as single source of truth
  * - Event emission for state changes
  * - Automatic progress.md rendering
+ * - Application-layer cascade deletion (no FK constraints)
  */
 
 import { getDB } from './db.js';
 import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
+import { deleteSessionCascade, cleanupOrphanRecords, getSessionStats } from './schema.js';
 
 // Type definitions
 export interface Session {
@@ -111,27 +113,14 @@ export class UnifiedStateManager extends EventEmitter {
 
   /**
    * Ensure all required tables exist
+   *
+   * Note: This method is now minimal since schema.ts handles table creation.
+   * The activity_log table is created by the main schema initialization.
    */
   private ensureTables(): void {
-    // Activity log table (new - stores all activities for progress rendering)
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS activity_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        session_id TEXT NOT NULL,
-        phase INTEGER NOT NULL,
-        event_type TEXT NOT NULL,
-        message TEXT NOT NULL,
-        agent_id TEXT,
-        details TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (session_id) REFERENCES research_sessions(session_id)
-      )
-    `);
-
-    this.db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_activity_session
-      ON activity_log(session_id, phase)
-    `);
+    // Tables are now created by initializeSchema() in schema.ts
+    // This method is kept for backwards compatibility but does nothing
+    console.log('ℹ️  Tables managed by schema.ts initialization');
   }
 
   // ==================== Session Operations ====================
@@ -212,6 +201,56 @@ export class UnifiedStateManager extends EventEmitter {
 
     const session = this.getSession(session_id)!;
     this.emit('session:completed', session);
+  }
+
+  /**
+   * Delete a session and all related records (application-layer cascade)
+   *
+   * This replaces foreign key cascade deletion with explicit cleanup.
+   * All related records (agents, activities, facts, entities, etc.) are
+   * removed in the correct order to maintain data integrity.
+   *
+   * @param session_id - Session ID to delete
+   * @returns Number of records deleted
+   */
+  deleteSession(session_id: string): number {
+    const session = this.getSession(session_id);
+    if (!session) {
+      throw new Error(`Session ${session_id} not found`);
+    }
+
+    // Use the application-layer cascade deletion from schema.ts
+    const deletedCount = deleteSessionCascade(this.db, session_id);
+
+    // Emit deletion event
+    this.emit('session:status_changed', session_id, session.status, 'deleted' as any);
+
+    return deletedCount;
+  }
+
+  /**
+   * Clean up orphan records (defensive maintenance)
+   *
+   * Removes records that reference non-existent sessions.
+   * Should be called periodically or after cleanup operations.
+   *
+   * @returns Object with count of cleaned records per table
+   */
+  cleanupOrphans(): { [table: string]: number } {
+    return cleanupOrphanRecords(this.db);
+  }
+
+  /**
+   * Get session statistics
+   *
+   * Returns counts of related records for a specific session.
+   * Useful for debugging and monitoring session state.
+   *
+   * @param session_id - Session ID to query
+   * @returns Object with count of records per table
+   */
+  getSessionStatistics(session_id: string): { [table: string]: number } {
+    return getSessionStats(this.db, session_id);
   }
 
   // ==================== Phase Operations ====================

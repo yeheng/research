@@ -13,8 +13,9 @@ import Database from 'better-sqlite3';
 
 /**
  * Current schema version - stored in SQLite's user_version pragma
+ * Version 2: Removed foreign key constraints for better concurrency and application-layer management
  */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /**
  * Complete database schema definition
@@ -59,8 +60,7 @@ CREATE TABLE IF NOT EXISTS research_agents (
     error_message TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    completed_at TEXT,
-    FOREIGN KEY (session_id) REFERENCES research_sessions(session_id)
+    completed_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_agents_session ON research_agents(session_id);
@@ -78,8 +78,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
     message TEXT NOT NULL,
     agent_id TEXT,
     details TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES research_sessions(session_id)
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_activity_session ON activity_log(session_id, phase);
@@ -93,8 +92,7 @@ CREATE TABLE IF NOT EXISTS phase_checkpoints (
     checkpoint_type TEXT NOT NULL DEFAULT 'checkpoint'
         CHECK (checkpoint_type IN ('pre_execution', 'mid_execution', 'post_execution', 'checkpoint')),
     state_snapshot TEXT NOT NULL,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES research_sessions(session_id)
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_checkpoints_session ON phase_checkpoints(session_id, phase_number);
@@ -113,8 +111,7 @@ CREATE TABLE IF NOT EXISTS ingested_data (
         CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     processed_at TEXT,
-    error_message TEXT,
-    FOREIGN KEY (session_id) REFERENCES research_sessions(session_id)
+    error_message TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_ingested_session ON ingested_data(session_id);
@@ -136,9 +133,7 @@ CREATE TABLE IF NOT EXISTS got_nodes (
     status TEXT DEFAULT 'active'
         CHECK (status IN ('active', 'pruned', 'aggregated', 'refined')),
     depth INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES research_sessions(session_id),
-    FOREIGN KEY (parent_id) REFERENCES got_nodes(node_id)
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_got_session ON got_nodes(session_id);
@@ -154,8 +149,7 @@ CREATE TABLE IF NOT EXISTS got_operations (
     input_nodes TEXT NOT NULL,
     output_nodes TEXT,
     parameters TEXT,
-    executed_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES research_sessions(session_id)
+    executed_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_got_ops_session ON got_operations(session_id);
@@ -174,8 +168,7 @@ CREATE TABLE IF NOT EXISTS facts (
         CHECK (source_quality IN ('A', 'B', 'C', 'D', 'E')),
     confidence REAL DEFAULT 0.5,
     extracted_from TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES research_sessions(session_id)
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_facts_session ON facts(session_id);
@@ -193,10 +186,7 @@ CREATE TABLE IF NOT EXISTS fact_conflicts (
         CHECK (severity IN ('low', 'medium', 'high')),
     resolved INTEGER DEFAULT 0,
     resolution_note TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES research_sessions(session_id),
-    FOREIGN KEY (fact_a_id) REFERENCES facts(fact_id),
-    FOREIGN KEY (fact_b_id) REFERENCES facts(fact_id)
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_conflicts_session ON fact_conflicts(session_id);
@@ -210,8 +200,7 @@ CREATE TABLE IF NOT EXISTS entities (
     entity_type TEXT NOT NULL,
     description TEXT,
     mention_count INTEGER DEFAULT 1,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES research_sessions(session_id)
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_entities_session ON entities(session_id);
@@ -225,10 +214,7 @@ CREATE TABLE IF NOT EXISTS entity_relationships (
     to_entity_id TEXT NOT NULL,
     relationship_type TEXT NOT NULL,
     source_url TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES research_sessions(session_id),
-    FOREIGN KEY (from_entity_id) REFERENCES entities(entity_id),
-    FOREIGN KEY (to_entity_id) REFERENCES entities(entity_id)
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_relationships_session ON entity_relationships(session_id);
@@ -246,8 +232,7 @@ CREATE TABLE IF NOT EXISTS citations (
         CHECK (quality_rating IN ('A', 'B', 'C', 'D', 'E')),
     is_valid INTEGER DEFAULT 1,
     validation_notes TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES research_sessions(session_id)
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_citations_session ON citations(session_id);
@@ -264,8 +249,7 @@ CREATE TABLE IF NOT EXISTS token_metrics (
     tokens_input INTEGER DEFAULT 0,
     tokens_output INTEGER DEFAULT 0,
     source TEXT,
-    recorded_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES research_sessions(session_id)
+    recorded_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_token_metrics_session ON token_metrics(session_id);
@@ -327,4 +311,173 @@ export function initializeSchema(db: Database.Database): void {
  */
 export function getSchemaVersion(db: Database.Database): number {
   return db.pragma('user_version', { simple: true }) as number;
+}
+
+// ==================== Application-Layer Data Management ====================
+
+/**
+ * Delete a research session and all related records (application-layer cascade)
+ *
+ * This function replaces foreign key cascade deletion with explicit application-layer
+ * cleanup. It removes all related records in the correct order to maintain data
+ * integrity even without FK constraints.
+ *
+ * Order of deletion (child to parent):
+ * 1. Dependency tables (fact_conflicts, entity_relationships)
+ * 2. Entity/Fact tables (facts, entities)
+ * 3. GoT tables (got_operations, got_nodes)
+ * 4. Agent and activity tables (research_agents, activity_log)
+ * 5. Data and checkpoints (ingested_data, phase_checkpoints)
+ * 6. Metrics (token_metrics, citations)
+ * 7. Finally, the session itself
+ *
+ * @param db - Database instance
+ * @param session_id - Session ID to delete
+ * @returns Number of records deleted
+ */
+export function deleteSessionCascade(db: Database.Database, session_id: string): number {
+  const deleteStatements = [
+    // Dependency tables (depend on facts, entities)
+    'DELETE FROM fact_conflicts WHERE session_id = ?',
+    'DELETE FROM entity_relationships WHERE session_id = ?',
+
+    // Core data tables
+    'DELETE FROM facts WHERE session_id = ?',
+    'DELETE FROM entities WHERE session_id = ?',
+
+    // GoT tables (operations before nodes for consistency)
+    'DELETE FROM got_operations WHERE session_id = ?',
+    'DELETE FROM got_nodes WHERE session_id = ?',
+
+    // Agent and activity tracking
+    'DELETE FROM research_agents WHERE session_id = ?',
+    'DELETE FROM activity_log WHERE session_id = ?',
+
+    // Data and checkpoints
+    'DELETE FROM ingested_data WHERE session_id = ?',
+    'DELETE FROM phase_checkpoints WHERE session_id = ?',
+
+    // Metrics and citations
+    'DELETE FROM token_metrics WHERE session_id = ?',
+    'DELETE FROM citations WHERE session_id = ?',
+
+    // Finally, the session itself
+    'DELETE FROM research_sessions WHERE session_id = ?',
+  ];
+
+  let totalDeleted = 0;
+
+  // Use transaction for atomicity
+  const transaction = db.transaction(() => {
+    for (const stmt of deleteStatements) {
+      const result = db.prepare(stmt).run(session_id);
+      totalDeleted += result.changes;
+    }
+  });
+
+  try {
+    transaction();
+    console.log(`🗑️  Deleted session ${session_id}: ${totalDeleted} records`);
+    return totalDeleted;
+  } catch (error) {
+    console.error(`❌ Error deleting session ${session_id}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Clean up orphan records (defensive maintenance)
+ *
+ * This function removes records that reference non-existent sessions.
+ * It should be called periodically or after session cleanup operations.
+ *
+ * @param db - Database instance
+ * @returns Object with count of cleaned records per table
+ */
+export function cleanupOrphanRecords(db: Database.Database): {
+  [table: string]: number;
+} {
+  const cleanupStatements = [
+    { table: 'research_agents', sql: 'DELETE FROM research_agents WHERE session_id NOT IN (SELECT session_id FROM research_sessions)' },
+    { table: 'activity_log', sql: 'DELETE FROM activity_log WHERE session_id NOT IN (SELECT session_id FROM research_sessions)' },
+    { table: 'phase_checkpoints', sql: 'DELETE FROM phase_checkpoints WHERE session_id NOT IN (SELECT session_id FROM research_sessions)' },
+    { table: 'ingested_data', sql: 'DELETE FROM ingested_data WHERE session_id NOT IN (SELECT session_id FROM research_sessions)' },
+    { table: 'got_nodes', sql: 'DELETE FROM got_nodes WHERE session_id NOT IN (SELECT session_id FROM research_sessions)' },
+    { table: 'got_operations', sql: 'DELETE FROM got_operations WHERE session_id NOT IN (SELECT session_id FROM research_sessions)' },
+    { table: 'facts', sql: 'DELETE FROM facts WHERE session_id NOT IN (SELECT session_id FROM research_sessions)' },
+    { table: 'fact_conflicts', sql: 'DELETE FROM fact_conflicts WHERE session_id NOT IN (SELECT session_id FROM research_sessions)' },
+    { table: 'entities', sql: 'DELETE FROM entities WHERE session_id NOT IN (SELECT session_id FROM research_sessions)' },
+    { table: 'entity_relationships', sql: 'DELETE FROM entity_relationships WHERE session_id NOT IN (SELECT session_id FROM research_sessions)' },
+    { table: 'citations', sql: 'DELETE FROM citations WHERE session_id NOT IN (SELECT session_id FROM research_sessions)' },
+    { table: 'token_metrics', sql: 'DELETE FROM token_metrics WHERE session_id NOT IN (SELECT session_id FROM research_sessions)' },
+  ];
+
+  const results: { [table: string]: number } = {};
+  let totalCleaned = 0;
+
+  for (const { table, sql } of cleanupStatements) {
+    try {
+      const result = db.prepare(sql).run();
+      results[table] = result.changes;
+      totalCleaned += result.changes;
+
+      if (result.changes > 0) {
+        console.log(`🧹 Cleaned ${result.changes} orphan records from ${table}`);
+      }
+    } catch (error) {
+      console.error(`❌ Error cleaning ${table}:`, error);
+      results[table] = -1; // Error indicator
+    }
+  }
+
+  if (totalCleaned > 0) {
+    console.log(`✅ Cleanup complete: ${totalCleaned} total orphan records removed`);
+  } else {
+    console.log(`✅ No orphan records found`);
+  }
+
+  return results;
+}
+
+/**
+ * Get session statistics
+ *
+ * Returns counts of related records for a specific session.
+ * Useful for debugging and monitoring session state.
+ *
+ * @param db - Database instance
+ * @param session_id - Session ID to query
+ * @returns Object with count of records per table
+ */
+export function getSessionStats(db: Database.Database, session_id: string): {
+  [table: string]: number;
+} {
+  const statsQueries = [
+    { table: 'research_agents', sql: 'SELECT COUNT(*) as count FROM research_agents WHERE session_id = ?' },
+    { table: 'activity_log', sql: 'SELECT COUNT(*) as count FROM activity_log WHERE session_id = ?' },
+    { table: 'phase_checkpoints', sql: 'SELECT COUNT(*) as count FROM phase_checkpoints WHERE session_id = ?' },
+    { table: 'ingested_data', sql: 'SELECT COUNT(*) as count FROM ingested_data WHERE session_id = ?' },
+    { table: 'got_nodes', sql: 'SELECT COUNT(*) as count FROM got_nodes WHERE session_id = ?' },
+    { table: 'got_operations', sql: 'SELECT COUNT(*) as count FROM got_operations WHERE session_id = ?' },
+    { table: 'facts', sql: 'SELECT COUNT(*) as count FROM facts WHERE session_id = ?' },
+    { table: 'fact_conflicts', sql: 'SELECT COUNT(*) as count FROM fact_conflicts WHERE session_id = ?' },
+    { table: 'entities', sql: 'SELECT COUNT(*) as count FROM entities WHERE session_id = ?' },
+    { table: 'entity_relationships', sql: 'SELECT COUNT(*) as count FROM entity_relationships WHERE session_id = ?' },
+    { table: 'citations', sql: 'SELECT COUNT(*) as count FROM citations WHERE session_id = ?' },
+    { table: 'token_metrics', sql: 'SELECT COUNT(*) as count FROM token_metrics WHERE session_id = ?' },
+  ];
+
+  const results: { [table: string]: number } = {};
+
+  for (const { table, sql } of statsQueries) {
+    try {
+      const row = db.prepare(sql).get(session_id) as { count: number };
+      results[table] = row.count;
+    } catch (error) {
+      console.error(`❌ Error getting stats for ${table}:`, error);
+      results[table] = -1;
+    }
+  }
+
+  return results;
 }

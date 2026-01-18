@@ -12,8 +12,11 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { initializeSchema } from './schema.js';
+import { randomUUID } from 'crypto';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
-const DB_PATH = path.join(process.cwd(), '.claude', 'mcp-server', 'state', 'research_state.db');
+const DB_PATH = join(tmpdir(), 'claude-mcp-server', `research_state_${randomUUID()}.db`);
 
 // Ensure state directory exists
 const STATE_DIR = path.dirname(DB_PATH);
