@@ -52,10 +52,10 @@
                            │ uses
 ┌──────────────────────────▼──────────────────────────────────┐
 │                   基础设施层 (Infrastructure)                 │
-│  ┌──────────────┐  ┌───────────────┐  ┌──────────────┐     │
-│  │ MCP Tools    │  │ GoT State Mgmt│  │ Hooks        │     │
-│  │ (数据处理)    │  │ (Graph Ctrl)  │  │ (Budget/Heal)│     │
-│  └──────────────┘  └───────────────┘  └──────────────┘     │
+│  ┌──────────────┐  ┌───────────────┐                       │
+│  │ MCP Tools    │  │ GoT State Mgmt│                       │
+│  │ (数据处理)    │  │ (Graph Ctrl)  │                       │
+│  └──────────────┘  └───────────────┘                       │
 │  ┌──────────────────────────────────────────────────┐      │
 │  │        SQLite (sessions, paths, metrics)          │      │
 │  └──────────────────────────────────────────────────┘      │
@@ -87,12 +87,6 @@
 │   │   │   └── AGENT.md           # 路径执行者
 │   │   └── data-processor-v3/
 │   │       └── AGENT.md           # 数据处理器
-│   │
-│   ├── hooks/                     # 生命周期 Hooks
-│   │   ├── enforce-budget.js      # 预算强制 (pre-command)
-│   │   ├── auto-heal.js           # 错误修复 (on-error)
-│   │   ├── auto-logger.js         # 自动日志
-│   │   └── restore-context.js     # 上下文恢复
 │   │
 │   └── mcp-server/                # MCP 服务器
 │       ├── src/
@@ -275,59 +269,6 @@ Agent → 调用 auto_process_data → 服务器批处理 → 返回结果
 
 ---
 
-## Hooks 系统 (v3.1)
-
-### Hook 类型
-
-| Hook | 触发时机 | 功能 |
-|------|----------|------|
-| `enforce-budget.js` | Pre-command | 硬预算限制 |
-| `auto-heal.js` | On-error | 自动错误修复 |
-| `auto-logger.js` | Post-tool | 自动日志记录 |
-| `restore-context.js` | Startup | 恢复未完成会话 |
-
-### 预算强制 Hook
-
-```javascript
-// .claude/hooks/enforce-budget.js
-// 物理层面的 Token 阻断
-
-const BUDGET_LIMIT = 500000;
-const usage = getTokenUsageFromDB();
-
-if (usage >= BUDGET_LIMIT) {
-  console.error('❌ BUDGET EXHAUSTED');
-  process.exit(1);  // 阻止命令执行
-}
-```
-
-**为什么需要硬约束？**
-- LLM 经常忽略 Prompt 中的软限制
-- 预算超支会导致意外成本
-- 物理阻断是唯一可靠的方式
-
-### 自动修复 Hook
-
-```javascript
-// .claude/hooks/auto-heal.js
-// 检测并修复常见错误
-
-const errorType = detectError(error);
-
-switch (errorType) {
-  case 'sqlite_lock':
-    healSQLiteLock();  // 清理 WAL 文件
-    break;
-  case 'mcp_down':
-    healMCPDown();     // 重启服务器
-    break;
-  case 'permission':
-    healPermissions(); // 修复权限
-    break;
-}
-```
-
----
 
 ## 研究模式 (v3.1)
 
@@ -460,23 +401,6 @@ CREATE TABLE got_operations (
 **后果**:
 - ✅ 节省 90% Phase 4 Token
 - ⚠️ 需要 MCP 工具调用
-
-### ADR-006: 硬预算约束 (v3.1)
-
-**状态**: 已接受
-
-**上下文**: LLM 忽略 Prompt 中的软限制。
-
-**决策**: 使用 pre-command hook 实现物理阻断。
-
-**理由**:
-- 唯一可靠的方式
-- 防止意外成本
-- 用户明确反馈
-
-**后果**:
-- ✅ 零预算超支
-- ⚠️ 需要用户配置
 
 ---
 

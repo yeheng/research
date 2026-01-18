@@ -19,7 +19,6 @@
       "Bash(node test-tools.js:*)",
       "Bash(test:*)",
       "Bash(wc:*)",
-      "Bash(for agent in /Users/yeheng/workspaces/research/template/.claude/agents/*/AGENT.md:*)",
       "Bash(done:*)",
       "Bash(grep:*)",
       "Bash(for:*)",
@@ -41,34 +40,5 @@
       "mcp__deep-research__update_session_status"
     ]
   },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "mcp__deep-research__.*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/auto-logger.js"
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/restore-context.js"
-          }
-        ]
-      }
-    ]
-  },
-  "outputStyle": "Structural Thinking",
-  "research": {
-    "default_output_dir": "RESEARCH",
-    "max_agents": 8,
-    "default_quality_threshold": 8,
-    "citation_style": "inline-with-url"
-  }
+  "outputStyle": "Structural Thinking"
 }
