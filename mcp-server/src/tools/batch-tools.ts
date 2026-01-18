@@ -5,15 +5,15 @@
  * Supports both new unified API and legacy aliases.
  */
 
-import { logger } from '../utils/logger.js';
+import { CacheManager, citationCache, conflictCache, entityCache, factCache, sourceRatingCache } from '../cache/cache-manager.js';
+import { BatchResult, createBatchItems, processBatch } from '../utils/batch.js';
 import { ValidationError } from '../utils/errors.js';
-import { processBatch, createBatchItems, BatchResult } from '../utils/batch.js';
-import { CacheManager, factCache, entityCache, citationCache, sourceRatingCache, conflictCache } from '../cache/cache-manager.js';
+import { logger } from '../utils/logger.js';
 
 // Import unified tools
-import { extract, factExtract, entityExtract } from './extract.js';
-import { validate, citationValidate, sourceRate } from './validate.js';
 import { conflictDetect } from './conflict-detect.js';
+import { extract } from './extract.js';
+import { validate } from './validate.js';
 
 interface BatchInput {
   items: any[];
@@ -123,144 +123,6 @@ export async function batchValidate(input: BatchInput): Promise<any> {
   });
 
   return formatBatchResponse(`batch-validate(mode=${mode})`, results, summary, cache);
-}
-
-// === Legacy Batch Tools (aliases) ===
-
-/**
- * Batch fact extraction
- * @deprecated Use batchExtract({ mode: 'fact', ... }) instead
- */
-export async function batchFactExtract(input: BatchInput): Promise<any> {
-  logger.info('Starting batch fact extraction (legacy)', { itemCount: input.items?.length });
-
-  if (!input.items || !Array.isArray(input.items)) {
-    throw new ValidationError('Items array is required');
-  }
-
-  const useCache = input.options?.useCache ?? true;
-  const batchItems = createBatchItems(input.items);
-
-  const processor = async (item: any) => {
-    if (useCache) {
-      const cacheKey = CacheManager.generateKey(item);
-      return factCache.getOrCompute(cacheKey, async () => {
-        const result = await factExtract(item);
-        return JSON.parse(result.content[0].text);
-      });
-    }
-    const result = await factExtract(item);
-    return JSON.parse(result.content[0].text);
-  };
-
-  const { results, summary } = await processBatch(batchItems, processor, {
-    maxConcurrency: input.options?.maxConcurrency ?? 5,
-    stopOnError: input.options?.stopOnError ?? false,
-  });
-
-  return formatBatchResponse('batch-fact-extract', results, summary, factCache);
-}
-
-/**
- * Batch entity extraction
- * @deprecated Use batchExtract({ mode: 'entity', ... }) instead
- */
-export async function batchEntityExtract(input: BatchInput): Promise<any> {
-  logger.info('Starting batch entity extraction (legacy)', { itemCount: input.items?.length });
-
-  if (!input.items || !Array.isArray(input.items)) {
-    throw new ValidationError('Items array is required');
-  }
-
-  const useCache = input.options?.useCache ?? true;
-  const batchItems = createBatchItems(input.items);
-
-  const processor = async (item: any) => {
-    if (useCache) {
-      const cacheKey = CacheManager.generateKey(item);
-      return entityCache.getOrCompute(cacheKey, async () => {
-        const result = await entityExtract(item);
-        return JSON.parse(result.content[0].text);
-      });
-    }
-    const result = await entityExtract(item);
-    return JSON.parse(result.content[0].text);
-  };
-
-  const { results, summary } = await processBatch(batchItems, processor, {
-    maxConcurrency: input.options?.maxConcurrency ?? 5,
-    stopOnError: input.options?.stopOnError ?? false,
-  });
-
-  return formatBatchResponse('batch-entity-extract', results, summary, entityCache);
-}
-
-/**
- * Batch citation validation
- * @deprecated Use batchValidate({ mode: 'citation', ... }) instead
- */
-export async function batchCitationValidate(input: BatchInput): Promise<any> {
-  logger.info('Starting batch citation validation (legacy)', { itemCount: input.items?.length });
-
-  if (!input.items || !Array.isArray(input.items)) {
-    throw new ValidationError('Items array is required');
-  }
-
-  const useCache = input.options?.useCache ?? true;
-  const batchItems = createBatchItems(input.items.map(item => ({ citations: [item] })));
-
-  const processor = async (item: any) => {
-    if (useCache) {
-      const cacheKey = CacheManager.generateKey(item);
-      return citationCache.getOrCompute(cacheKey, async () => {
-        const result = await citationValidate(item);
-        return JSON.parse(result.content[0].text);
-      });
-    }
-    const result = await citationValidate(item);
-    return JSON.parse(result.content[0].text);
-  };
-
-  const { results, summary } = await processBatch(batchItems, processor, {
-    maxConcurrency: input.options?.maxConcurrency ?? 5,
-    stopOnError: input.options?.stopOnError ?? false,
-  });
-
-  return formatBatchResponse('batch-citation-validate', results, summary, citationCache);
-}
-
-/**
- * Batch source rating
- * @deprecated Use batchValidate({ mode: 'source', ... }) instead
- */
-export async function batchSourceRate(input: BatchInput): Promise<any> {
-  logger.info('Starting batch source rating (legacy)', { itemCount: input.items?.length });
-
-  if (!input.items || !Array.isArray(input.items)) {
-    throw new ValidationError('Items array is required');
-  }
-
-  const useCache = input.options?.useCache ?? true;
-  const batchItems = createBatchItems(input.items);
-
-  const processor = async (item: any) => {
-    if (useCache) {
-      const cacheKey = CacheManager.generateKey(item.source_url || item);
-      return sourceRatingCache.getOrCompute(cacheKey, async () => {
-        const result = await sourceRate(item);
-        return JSON.parse(result.content[0].text);
-      });
-    }
-    const result = await sourceRate(item);
-    return JSON.parse(result.content[0].text);
-  };
-
-  const { results, summary } = await processBatch(batchItems, processor, {
-    maxConcurrency: input.options?.maxConcurrency ?? 5,
-    stopOnError: input.options?.stopOnError ?? false,
-  });
-
-  return formatBatchResponse('batch-source-rate', results, summary, sourceRatingCache);
 }
 
 /**

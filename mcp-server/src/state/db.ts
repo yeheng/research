@@ -5,11 +5,13 @@
  * - WAL mode for better concurrency
  * - Foreign key constraints enabled
  * - Synchronous mode optimized for performance
+ * - Embedded schema (no external file dependencies)
  */
 
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { initializeSchema } from './schema.js';
 
 const DB_PATH = path.join(process.cwd(), '.claude', 'mcp-server', 'state', 'research_state.db');
 
@@ -31,6 +33,9 @@ db.pragma('foreign_keys = ON');
 // Performance optimization: batch operations with temporary sync off
 db.pragma('synchronous = NORMAL');
 
+// Initialize database schema (embedded - no external file needed)
+initializeSchema(db);
+
 /**
  * Close database connection
  * Call this on server shutdown
@@ -45,35 +50,3 @@ export function closeDB(): void {
 export function getDB(): Database.Database {
   return db;
 }
-
-/**
- * Initialize database schema
- * Reads schema.sql and executes it (idempotent)
- */
-export function initializeSchema(): void {
-  // Try multiple paths for schema.sql
-  const possiblePaths = [
-    path.join('/Users/yeheng/workspaces/research/template/.claude/mcp-server/state/', 'schema.sql')
-  ];
-
-  let schemaPath: string | null = null;
-  for (const p of possiblePaths) {
-    if (fs.existsSync(p)) {
-      schemaPath = p;
-      break;
-    }
-  }
-
-  if (!schemaPath) {
-    console.warn('⚠️  schema.sql not found in any location, skipping initialization');
-    return;
-  }
-
-  const schema = fs.readFileSync(schemaPath, 'utf-8');
-  db.exec(schema);
-
-  console.log('✅ Database schema initialized from:', schemaPath);
-}
-
-// Auto-initialize on module load
-initializeSchema();

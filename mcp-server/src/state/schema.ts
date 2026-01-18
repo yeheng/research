@@ -1,3 +1,25 @@
+/**
+ * Database Schema Constants
+ *
+ * Version: 4.0 (v3.1 + streaming data ingestion)
+ * SQLite with WAL mode
+ *
+ * This file embeds the database schema directly in TypeScript,
+ * eliminating the need for external .sql files and ensuring
+ * reliable initialization across all deployment environments.
+ */
+
+import Database from 'better-sqlite3';
+
+/**
+ * Current schema version - stored in SQLite's user_version pragma
+ */
+export const SCHEMA_VERSION = 1;
+
+/**
+ * Complete database schema definition
+ */
+export const DATABASE_SCHEMA = `
 -- Deep Research Framework - Database Schema
 -- Version: 4.0 (v3.1 + streaming data ingestion)
 -- SQLite with WAL mode
@@ -29,7 +51,7 @@ CREATE TABLE IF NOT EXISTS research_agents (
     agent_type TEXT NOT NULL,
     agent_role TEXT,
     focus_description TEXT,
-    search_queries TEXT,  -- JSON array
+    search_queries TEXT,
     status TEXT DEFAULT 'deploying'
         CHECK (status IN ('deploying', 'running', 'completed', 'failed', 'timeout')),
     output_file TEXT,
@@ -55,7 +77,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
         CHECK (event_type IN ('phase_start', 'phase_complete', 'agent_deploy', 'agent_complete', 'info', 'error')),
     message TEXT NOT NULL,
     agent_id TEXT,
-    details TEXT,  -- JSON object
+    details TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (session_id) REFERENCES research_sessions(session_id)
 );
@@ -70,7 +92,7 @@ CREATE TABLE IF NOT EXISTS phase_checkpoints (
     phase_number INTEGER NOT NULL,
     checkpoint_type TEXT NOT NULL DEFAULT 'checkpoint'
         CHECK (checkpoint_type IN ('pre_execution', 'mid_execution', 'post_execution', 'checkpoint')),
-    state_snapshot TEXT NOT NULL,  -- JSON object
+    state_snapshot TEXT NOT NULL,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (session_id) REFERENCES research_sessions(session_id)
 );
@@ -85,7 +107,7 @@ CREATE TABLE IF NOT EXISTS ingested_data (
     session_id TEXT NOT NULL,
     data_type TEXT NOT NULL
         CHECK (data_type IN ('raw_text', 'web_page', 'document', 'fact', 'entity')),
-    data TEXT NOT NULL,  -- JSON object
+    data TEXT NOT NULL,
     source_url TEXT,
     status TEXT DEFAULT 'pending'
         CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
@@ -108,7 +130,7 @@ CREATE TABLE IF NOT EXISTS got_nodes (
     node_type TEXT NOT NULL
         CHECK (node_type IN ('root', 'generated', 'aggregated', 'refined')),
     content TEXT NOT NULL,
-    summary TEXT,  -- Compressed version for token efficiency
+    summary TEXT,
     quality_score REAL DEFAULT 0.0,
     compression_ratio REAL DEFAULT 1.0,
     status TEXT DEFAULT 'active'
@@ -129,9 +151,9 @@ CREATE TABLE IF NOT EXISTS got_operations (
     session_id TEXT NOT NULL,
     operation_type TEXT NOT NULL
         CHECK (operation_type IN ('Generate', 'Aggregate', 'Refine', 'Score', 'Prune')),
-    input_nodes TEXT NOT NULL,  -- JSON array of node_ids
-    output_nodes TEXT,  -- JSON array of node_ids
-    parameters TEXT,  -- JSON object
+    input_nodes TEXT NOT NULL,
+    output_nodes TEXT,
+    parameters TEXT,
     executed_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (session_id) REFERENCES research_sessions(session_id)
 );
@@ -151,7 +173,7 @@ CREATE TABLE IF NOT EXISTS facts (
     source_quality TEXT DEFAULT 'C'
         CHECK (source_quality IN ('A', 'B', 'C', 'D', 'E')),
     confidence REAL DEFAULT 0.5,
-    extracted_from TEXT,  -- Agent ID or file path
+    extracted_from TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (session_id) REFERENCES research_sessions(session_id)
 );
@@ -267,3 +289,42 @@ BEGIN
     SET updated_at = CURRENT_TIMESTAMP
     WHERE agent_id = NEW.agent_id;
 END;
+`;
+
+/**
+ * Initialize database schema with version tracking
+ *
+ * This function checks the current schema version using SQLite's user_version pragma
+ * and only applies the schema if it's outdated. This ensures:
+ * - Idempotent initialization (safe to call multiple times)
+ * - Schema version tracking (can detect schema changes)
+ * - No external file dependencies (works in all build environments)
+ *
+ * @param db - Database instance to initialize
+ */
+export function initializeSchema(db: Database.Database): void {
+  // Check current schema version
+  const currentVersion = db.pragma('user_version', { simple: true }) as number;
+
+  if (currentVersion < SCHEMA_VERSION) {
+    // Apply schema
+    db.exec(DATABASE_SCHEMA);
+
+    // Update version
+    db.pragma(`user_version = ${SCHEMA_VERSION}`);
+
+    console.log(`✅ Database schema initialized (version ${SCHEMA_VERSION})`);
+  } else {
+    console.log(`ℹ️  Database schema up to date (version ${currentVersion})`);
+  }
+}
+
+/**
+ * Get the current schema version from a database
+ *
+ * @param db - Database instance to check
+ * @returns Current schema version number
+ */
+export function getSchemaVersion(db: Database.Database): number {
+  return db.pragma('user_version', { simple: true }) as number;
+}

@@ -38,62 +38,64 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 // Unified tools
-import { extract, factExtract, entityExtract } from './tools/extract.js';
-import { validate, citationValidate, sourceRate } from './tools/validate.js';
 import { conflictDetect } from './tools/conflict-detect.js';
+import { extract } from './tools/extract.js';
+import { validate } from './tools/validate.js';
+import { processSources } from './tools/process-sources.js';
 
 // Batch tools
 import {
+  batchConflictDetect,
   batchExtract,
   batchValidate,
-  batchFactExtract,
-  batchEntityExtract,
-  batchCitationValidate,
-  batchSourceRate,
-  batchConflictDetect,
-  getCacheStats,
   clearAllCaches,
+  getCacheStats,
 } from './tools/batch-tools.js';
 
 // State management tools
 import {
-  stateTools,
   createSessionHandler,
-  updateSessionStatusHandler,
   getSessionInfoHandler,
+  stateTools,
+  updateSessionStatusHandler,
 } from './tools/state-tools.js';
 
 // Agent management tools
 import {
   agentTools,
+  getActiveAgentsHandler,
   registerAgentHandler,
   updateAgentStatusHandler,
-  getActiveAgentsHandler,
 } from './tools/agent-tools.js';
 
 // Logging tools
-import { loggingTools, logActivityHandler } from './tools/activity-logger.js';
+import { logActivityHandler, loggingTools } from './tools/activity-logger.js';
 import { renderingTools, renderProgressHandler } from './tools/progress-renderer.js';
 
 // GoT tools
 import {
-  gotTools,
+  aggregatePathsHandler,
+  exportStateHandler,
+  exportVisualizationHandler,
   generatePathsHandler,
-  scoreAndPruneHandler,
-  aggregatePathsHandler
+  getGraphStateHandler,
+  gotTools,
+  importStateHandler,
+  refinePathHandler,
+  scoreAndPruneHandler
 } from './tools/got-tools.js';
 
 // Auto-process data tool
 import {
-  autoProcessDataTool,
   autoProcessDataHandler,
+  autoProcessDataTool,
   AutoProcessInput
 } from './tools/auto-process-data.js';
 
 // State machine tools (v4.0)
 import {
-  stateMachineTools,
-  getNextActionHandler
+  getNextActionHandler,
+  stateMachineTools
 } from './tools/state-machine-tools.js';
 
 // Data ingestion tools (v4.0)
@@ -210,6 +212,49 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             tolerance: { type: 'object', description: 'Conflict tolerance settings' },
           },
           required: ['facts'],
+        },
+      },
+      {
+        name: 'process_sources',
+        description: 'High-level tool to process multiple sources with combined operations (extract facts, entities, validate citations, rate quality)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            sources: {
+              type: 'array',
+              description: 'Array of source documents to process',
+              items: {
+                type: 'object',
+                properties: {
+                  url: { type: 'string', description: 'Source URL' },
+                  content: { type: 'string', description: 'Source content text' },
+                  type: {
+                    type: 'string',
+                    enum: ['academic', 'industry', 'news', 'blog', 'official'],
+                    description: 'Type of source'
+                  },
+                  metadata: { type: 'object', description: 'Additional metadata' }
+                },
+                required: ['url', 'content', 'type']
+              }
+            },
+            operations: {
+              type: 'array',
+              description: 'Operations to perform',
+              items: {
+                type: 'string',
+                enum: ['extract_facts', 'extract_entities', 'validate_citations', 'rate_quality']
+              }
+            },
+            options: {
+              type: 'object',
+              properties: {
+                batchSize: { type: 'number', description: 'Batch size for processing' },
+                parallel: { type: 'boolean', description: 'Process in parallel (default: true)' }
+              }
+            }
+          },
+          required: ['sources', 'operations'],
         },
       },
       // === NEW Unified Batch Tools ===
@@ -354,12 +399,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
 
-      // === State Management Tools ===
-      ...stateTools,
-      ...agentTools,
-      ...loggingTools,
-      ...renderingTools,
-
       // === GoT Tools ===
       ...gotTools,
 
@@ -391,6 +430,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'conflict-detect':
         return await conflictDetect(args as any);
 
+      case 'process_sources':
+        return {
+          content: [{ type: 'text', text: JSON.stringify(await processSources(args as any), null, 2) }],
+        };
+
       // === NEW Unified Batch Tools ===
       case 'batch-extract':
         return await batchExtract(args as any);
@@ -400,32 +444,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'batch-conflict-detect':
         return await batchConflictDetect(args as any);
-
-      // === Legacy Tools (Aliases) ===
-      case 'fact-extract':
-        return await factExtract(args as any);
-
-      case 'entity-extract':
-        return await entityExtract(args as any);
-
-      case 'citation-validate':
-        return await citationValidate(args as any);
-
-      case 'source-rate':
-        return await sourceRate(args as any);
-
-      // === Legacy Batch Tools ===
-      case 'batch-fact-extract':
-        return await batchFactExtract(args as any);
-
-      case 'batch-entity-extract':
-        return await batchEntityExtract(args as any);
-
-      case 'batch-citation-validate':
-        return await batchCitationValidate(args as any);
-
-      case 'batch-source-rate':
-        return await batchSourceRate(args as any);
 
       // === State Management Tools ===
       case 'create_research_session':
@@ -483,6 +501,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [{ type: 'text', text: JSON.stringify(await generatePathsHandler(args), null, 2) }],
         };
 
+      case 'refine_path':
+        return {
+          content: [{ type: 'text', text: JSON.stringify(await refinePathHandler(args), null, 2) }],
+        };
+
       case 'score_and_prune':
         return {
           content: [{ type: 'text', text: JSON.stringify(await scoreAndPruneHandler(args), null, 2) }],
@@ -491,6 +514,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'aggregate_paths':
         return {
           content: [{ type: 'text', text: JSON.stringify(await aggregatePathsHandler(args), null, 2) }],
+        };
+
+      case 'export_state':
+        return {
+          content: [{ type: 'text', text: JSON.stringify(await exportStateHandler(args), null, 2) }],
+        };
+
+      case 'import_state':
+        return {
+          content: [{ type: 'text', text: JSON.stringify(await importStateHandler(args), null, 2) }],
+        };
+
+      case 'export_visualization':
+        return {
+          content: [{ type: 'text', text: JSON.stringify(await exportVisualizationHandler(args), null, 2) }],
+        };
+
+      case 'get_graph_state':
+        return {
+          content: [{ type: 'text', text: JSON.stringify(await getGraphStateHandler(args), null, 2) }],
         };
 
       // === State Machine Tools (v4.0) ===
@@ -532,8 +575,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('Deep Research MCP Server v2.1.0 running on stdio');
-  console.error('Tools: 6 unified + 10 legacy aliases + 9 state + 4 utils = 29 registered (12 unique)');
+  console.error('Deep Research MCP Server v4.0 running on stdio');
+  console.error('Tools: 6 unified + 10 legacy aliases + 9 state + 4 utils + 8 GoT = 33 registered (20 unique)');
 }
 
 main().catch((error) => {

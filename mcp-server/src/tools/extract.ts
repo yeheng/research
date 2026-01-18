@@ -8,8 +8,8 @@
  * - 'all': Extract both facts and entities
  */
 
+import { ProcessingError, ValidationError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
-import { ValidationError, ProcessingError } from '../utils/errors.js';
 
 // === Types ===
 
@@ -288,22 +288,4 @@ function extractRelationships(text: string, entities: EntityObject[]): EdgeObjec
   }
 
   return edges;
-}
-
-// === Legacy Aliases ===
-
-/**
- * Legacy alias for fact extraction
- * @deprecated Use extract({ mode: 'fact', ... }) instead
- */
-export async function factExtract(input: any): Promise<any> {
-  return extract({ ...input, mode: 'fact' });
-}
-
-/**
- * Legacy alias for entity extraction
- * @deprecated Use extract({ mode: 'entity', ... }) instead
- */
-export async function entityExtract(input: any): Promise<any> {
-  return extract({ ...input, mode: 'entity' });
 }

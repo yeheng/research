@@ -29,15 +29,13 @@
       "Bash(sqlite3:*)",
       "Bash(chmod:*)",
       "Bash(npm install:*)",
-      "Bash(:*::*)"
+      "Bash(:*::*)",
+      "Bash(timeout:*)",
+      "Bash(/usr/bin/du:*)",
+      "Bash(npm ls:*)",
+      "Bash(npm pkg get:*)",
+      "Bash(do basename:*)"
     ]
-  },
-  "outputStyle": "Structural Thinking",
-  "research": {
-    "default_output_dir": "RESEARCH",
-    "max_agents": 8,
-    "default_quality_threshold": 8,
-    "citation_style": "inline-with-url"
   },
   "hooks": {
     "PostToolUse": [
@@ -61,5 +59,12 @@
         ]
       }
     ]
+  },
+  "outputStyle": "Structural Thinking",
+  "research": {
+    "default_output_dir": "RESEARCH",
+    "max_agents": 8,
+    "default_quality_threshold": 8,
+    "citation_style": "inline-with-url"
   }
 }

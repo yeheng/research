@@ -9,7 +9,6 @@
  */
 
 import { logger } from '../utils/logger.js';
-import { ValidationError } from '../utils/errors.js';
 
 // === Types ===
 
@@ -245,27 +244,4 @@ function rateSource(
   }
 
   return { quality_rating: rating, justification, credibility_indicators: indicators };
-}
-
-// === Legacy Aliases ===
-
-/**
- * Legacy alias for citation validation
- * @deprecated Use validate({ mode: 'citation', ... }) instead
- */
-export async function citationValidate(input: any): Promise<any> {
-  return validate({ ...input, mode: 'citation' });
-}
-
-/**
- * Legacy alias for source rating
- * @deprecated Use validate({ mode: 'source', ... }) instead
- */
-export async function sourceRate(input: any): Promise<any> {
-  return validate({
-    mode: 'source',
-    source_url: input.source_url,
-    source_type: input.source_type,
-    metadata: input.metadata,
-  });
 }
