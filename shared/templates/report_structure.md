@@ -1,6 +1,18 @@
 # Research Report Structure Templates
 
-Select the appropriate template based on research type.
+> **Template Type**: Reference Documentation
+>
+> **Purpose**: This document provides structural templates for different types of research reports.
+>
+> **Usage**: These templates are **reference guides** for human researchers and agents. They are NOT programmatically enforced. Agents should follow these structures when generating reports, but the templates serve as guidelines rather than strict validation rules.
+>
+> **Version**: v4.0
+>
+> **Path**: `shared/templates/report_structure.md`
+>
+> ---
+>
+> Select the appropriate template based on research type.
 
 ---
 

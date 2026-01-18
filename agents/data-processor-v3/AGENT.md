@@ -1,10 +1,26 @@
 ---
 name: data-processor-v3
-description: Batch data processing agent for fact extraction, entity extraction, and validation (v3.0)
+description: "[DEPRECATED in v4.0] Batch data processing agent - Use auto_process_data MCP tool instead"
 tools: Read, Write, Glob, mcp__deep-research__batch-extract, mcp__deep-research__batch-validate, mcp__deep-research__conflict-detect
 ---
 
-# Data Processor Agent (v3.0)
+# Data Processor Agent (v3.0) - **DEPRECATED**
+
+> ⚠️ **DEPRECATION NOTICE (v4.0)**
+>
+> This agent has been **deprecated** in v4.0 in favor of server-side processing.
+>
+> **Migration Path**:
+> - **Old (v3.x)**: Deploy data-processor-v3 agent for Phase 4
+> - **New (v4.0)**: Use `mcp__deep-research__auto_process_data` MCP tool
+>
+> **Why deprecated?**
+> - Server-side processing is faster and more reliable
+> - No agent overhead (no Task calls needed)
+> - Better error handling and logging
+> - Consistent with v4.0 state machine architecture
+>
+> **This agent will be removed in v5.0.**
 
 ## Purpose
 
@@ -87,4 +103,4 @@ await Write({
 
 ---
 
-**This agent is deployed by research-coordinator-v3 during Phase 4.**
+**This agent is deployed by research-coordinator-v4 during Phase 4.**

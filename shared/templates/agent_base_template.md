@@ -1,6 +1,18 @@
 # Agent Base Template
 
-This template defines common patterns shared across all research agents.
+> **Template Type**: Reference Documentation
+>
+> **Purpose**: This document defines common patterns and best practices shared across all research agents.
+>
+> **Usage**: These templates are **reference guides** for creating and maintaining agents. They serve as structural guidelines but are NOT programmatically enforced. Agents should follow these patterns for consistency, but deviations are allowed when necessary.
+>
+> **Version**: v4.0
+>
+> **Path**: `shared/templates/agent_base_template.md`
+>
+> ---
+
+> This template defines common patterns shared across all research agents.
 
 ## Standard YAML Frontmatter
 

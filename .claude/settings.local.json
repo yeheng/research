@@ -34,7 +34,8 @@
       "Bash(/usr/bin/du:*)",
       "Bash(npm ls:*)",
       "Bash(npm pkg get:*)",
-      "Bash(do basename:*)"
+      "Bash(do basename:*)",
+      "Bash(xargs:*)"
     ]
   },
   "hooks": {

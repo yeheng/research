@@ -52,6 +52,7 @@ function getGraphState(sessionId: string): GraphState {
     session_id: sessionId,
     iteration: metadata.iteration || 0,
     max_iterations: metadata.max_iterations || 10,
+    confidence_threshold: metadata.confidence_threshold || 0.9, // Default to 0.9 if not set
     paths: paths,
     confidence: metadata.confidence || 0,
     aggregated: metadata.aggregated || false,
@@ -76,10 +77,10 @@ export function getNextActionHandler(args: any) {
   // Get current graph state
   const state = getGraphState(session_id);
 
-  // Create state machine instance
+  // Create state machine instance with configurable threshold
   const stateMachine = new ResearchStateMachine({
     maxIterations: state.max_iterations,
-    confidenceThreshold: 0.9
+    confidenceThreshold: state.confidence_threshold ?? 0.9 // Use session config, default to 0.9
   });
 
   // Get next action

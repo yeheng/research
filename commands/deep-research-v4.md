@@ -1,12 +1,12 @@
 ---
-description: Execute comprehensive deep research workflow (v3.1 - Graph of Thoughts Architecture)
+description: Execute comprehensive deep research workflow (v4.0 - Server-Side State Machine Architecture)
 argument-hint: [research topic or question] [--fast]
 allowed-tools: Task, WebSearch, WebFetch, mcp__web_reader__webReader, Read, Write, TodoWrite, AskUserQuestion, mcp__deep-research__*
 ---
 
-# Deep Research Command (v3.1)
+# Deep Research Command (v4.0)
 
-Execute research workflow using **Graph of Thoughts (GoT)** architecture with intelligent path optimization.
+Execute research workflow using **Graph of Thoughts (GoT)** architecture with intelligent path optimization. Provides a flexible, scalable, and efficient solution for complex research tasks. Please use english to think and execute, communicate with Chinese.
 
 ---
 
@@ -15,36 +15,41 @@ Execute research workflow using **Graph of Thoughts (GoT)** architecture with in
 $ARGUMENTS
 
 **Detect Mode**: Check if `--fast` flag is present in $ARGUMENTS
+
 - If `--fast` detected → Run **Quick Research** mode (5-10 min, 3-5 sources)
 - If no `--fast` → Run **Deep Research** mode (30-60 min, 20+ sources)
 
 ---
 
-## Architecture Overview (v3.1)
+## Architecture Overview (v4.0)
 
 ```
-User → deep-research-v3 command
+User → deep-research-v4 command
        ↓
    Mode detection (--fast?)
        ↓
-   research-coordinator-v3 agent (GoT controller)
+   research-coordinator-v4 agent (State Machine Executor)
        ↓
-   Generate Paths → Execute → Score → Prune → Aggregate → Loop
+   get_next_action() → Execute Instruction → Update State → Loop
+       ↓
+   MCP Server State Machine (Decision Engine)
        ↓
    ├─ research-worker-v3 agents (parallel execution)
-   └─ data-processor-v3 agent (batch processing)
+   └─ auto_process_data tool (server-side batch processing)
        ↓
-   MCP Tools (fact extraction, GoT state management)
+   SQLite State Storage (GoT graph persistence)
        ↓
    RESEARCH/[topic]/ (final output)
 ```
 
-**v3.1 Key Changes**:
-- ✅ **Graph of Thoughts**: Dynamic path optimization (not linear phases)
-- ✅ **GoT Loop**: Generate → Execute → Score → Prune → Aggregate
+**v4.0 Key Changes**:
+
+- ✅ **Server-Side State Machine**: Decision logic moved to MCP server
+- ✅ **Agent as Executor**: Agent only executes instructions, no GoT logic
+- ✅ **get_next_action()**: Server tells agent what to do next
+- ✅ **SQLite Persistence**: Complete state recovery support
 - ✅ **2 Modes**: Quick (`--fast`) and Deep (default)
-- ✅ **Auto-Processing**: Phase 4 moved to server-side
-- ✅ **Hooks**: Budget enforcement, auto-healing
+- ✅ **Auto-Processing**: Phase 4 server-side via auto_process_data tool
 
 ---
 
@@ -55,12 +60,14 @@ User → deep-research-v3 command
 **Trigger**: `--fast` flag detected in $ARGUMENTS
 
 **Characteristics**:
+
 - Single research path (no GoT optimization needed)
 - 3-5 sources, 5-10 minutes
 - Simple questions with clear answers
 - No subtopic decomposition
 
 **Workflow**:
+
 ```typescript
 // Quick mode - skip GoT, direct execution
 QuickResearchWorkflow:
@@ -72,6 +79,7 @@ QuickResearchWorkflow:
 ```
 
 **When to use Quick Mode**:
+
 - ✅ Single, clear question
 - ✅ Only 1-2 data sources needed
 - ✅ Time-sensitive (need fast results)
@@ -82,6 +90,7 @@ QuickResearchWorkflow:
 **Trigger**: No `--fast` flag
 
 **Characteristics**:
+
 - GoT path optimization enabled
 - 20+ sources, 30-60 minutes
 - Complex, multi-faceted topics
@@ -164,6 +173,7 @@ if (existingResearch.includes(topic)) {
 For deep research, ask clarifying questions:
 
 **Question 1 - Research Type**:
+
 ```
 "What type of research do you need?"
 - Exploratory: Broad overview
@@ -174,6 +184,7 @@ For deep research, ask clarifying questions:
 ```
 
 **Question 2 - Specific Focus**:
+
 ```
 "What aspects should be prioritized?"
 - Technical details
@@ -183,6 +194,7 @@ For deep research, ask clarifying questions:
 ```
 
 **Question 3 - Output Format**:
+
 ```
 "What deliverable format?"
 - Comprehensive report (20-50 pages)
@@ -196,7 +208,7 @@ For deep research, ask clarifying questions:
 
 ```typescript
 Task({
-  subagent_type: "research-coordinator-v3",
+  subagent_type: "research-coordinator-v4",
   description: isFastMode ? "Quick research" : "GoT deep research",
   prompt: `
 Research Topic: ${topic}
@@ -231,13 +243,14 @@ Output: RESEARCH/${sanitizedTopic}/
 
 ---
 
-## Core Agents (v3.1)
+## Core Agents (v4.0)
 
-### 1. research-coordinator-v3 (GoT Controller)
+### 1. research-coordinator-v4 (State Machine Executor)
 
 **Role**: Graph of Thoughts controller
 
 **Responsibilities**:
+
 - GoT loop orchestration
 - Path generation and pruning
 - Confidence assessment
@@ -254,6 +267,7 @@ Output: RESEARCH/${sanitizedTopic}/
 **Role**: Executes specific research paths
 
 **Responsibilities**:
+
 - Path-specific research
 - Source evaluation
 - Fact extraction
@@ -263,33 +277,37 @@ Output: RESEARCH/${sanitizedTopic}/
 
 ---
 
-### 3. data-processor-v3
+### 3. auto_process_data Tool (Server-Side Batch Processing)
 
-**Role**: Server-side batch processing
+**Role**: Server-side batch processing (v4.0)
 
 **Responsibilities**:
-- Auto-process raw data (Phase 4 moved from Agent)
+
+- Auto-process raw data in Phase 4
 - Batch fact extraction
 - Batch entity extraction
 - Conflict detection
 
-**Tools**: mcp__deep-research__batch-extract, mcp__deep-research__batch-validate, Glob, Read, Write
+**Tools**: mcp__deep-research__auto_process_data, mcp__deep-research__batch-extract, mcp__deep-research__batch-validate
 
-**Key Change**: Processing is now server-side via MCP tool
+**Key Change**: Processing moved from agent to server-side MCP tool
 
 ---
 
-## MCP Tools (v3.1)
+## MCP Tools (v4.0)
 
 ### GoT Operations (NEW)
+
 - `mcp__deep-research__generate_paths`: Generate k exploration paths
 - `mcp__deep-research__score_and_prune`: Rate and prune paths
 - `mcp__deep-research__aggregate_paths`: Merge k findings
 
 ### Auto-Processing (NEW)
+
 - `mcp__deep-research__auto_process_data`: Server-side Phase 4 processing
 
 ### Core Tools (5)
+
 - `mcp__deep-research__extract`: Unified extraction (fact + entity)
 - `mcp__deep-research__validate`: Unified validation (citation + source)
 - `mcp__deep-research__conflict-detect`: Find contradictions
@@ -297,6 +315,7 @@ Output: RESEARCH/${sanitizedTopic}/
 - `mcp__deep-research__batch-validate`: Batch validation
 
 ### State Management Tools (11)
+
 - **Session**: `create_research_session`, `update_session_status`, `get_session_info`
 - **Agent**: `register_agent`, `update_agent_status`, `get_active_agents`
 - **Phase**: `update_current_phase`, `get_current_phase`, `checkpoint_phase`
@@ -335,6 +354,7 @@ RESEARCH/[topic]/
 ## Citation Requirements
 
 **Every factual claim must include**:
+
 1. ✅ Author/Organization name
 2. ✅ Publication date
 3. ✅ Source title
@@ -342,6 +362,7 @@ RESEARCH/[topic]/
 5. ✅ Page numbers (if applicable)
 
 **Source Quality Ratings (A-E)**:
+
 - **A**: Peer-reviewed journals, systematic reviews, RCTs
 - **B**: Industry reports, reputable analysts, government data
 - **C**: News articles, expert opinion, case studies
@@ -368,6 +389,7 @@ RESEARCH/[topic]/
 ## Architecture Evolution
 
 ### v2.1 (Previous)
+
 - ❌ 4-layer: Command → Skill → Agent → Tool
 - ❌ 6 Skills (thin wrappers)
 - ❌ 10+ Agents (fine-grained phases)
@@ -375,12 +397,14 @@ RESEARCH/[topic]/
 - ❌ No path optimization
 
 ### v3.0 (Previous)
+
 - ✅ 2-layer: Command → Agent → Tool
 - ✅ 3 Agents (coordinator, worker, processor)
 - ✅ Linear 7-phase workflow
 - ❌ GoT not activated
 
 ### v3.1 (Current)
+
 - ✅ Graph of Thoughts architecture
 - ✅ GoT loop: Generate → Execute → Score → Prune → Aggregate
 - ✅ 2 Modes: Quick (--fast) and Deep
@@ -393,16 +417,19 @@ RESEARCH/[topic]/
 ## Error Handling
 
 **Command-Level Errors**:
+
 - E001: Topic too short → Request longer description (min 10 chars)
 - E002: Invalid parameters → Request clarification
 - E003: Existing research conflict → Ask user for mode
 
 **GoT-Level Errors** (handled by coordinator):
+
 - Path generation failure → Retry with fallback queries
 - Worker timeout → Prune stuck path, continue with others
 - Low confidence scores → Generate new paths from existing findings
 
 **Resilience Features**:
+
 - Exponential backoff retry (max 3 attempts)
 - Wayback Machine fallback for URLs
 - Budget hooks prevent overspending
@@ -413,16 +440,19 @@ RESEARCH/[topic]/
 ## Important Notes
 
 **TodoWrite Usage**:
+
 - ✅ Track GoT loop iterations
 - ✅ Mark paths as in_progress/completed
 - ✅ Keep user informed of progress
 
 **Parallel Deployment**:
+
 - ✅ Deploy multiple workers in parallel (single response, multiple Task calls)
 - ✅ Each worker explores one unique path
 - ✅ Typical: 3-8 workers depending on complexity
 
 **GoT Best Practices**:
+
 - ✅ Generate diverse paths (avoid redundancy)
 - ✅ Prune aggressively (keep only best branches)
 - ✅ Aggregate complementary findings

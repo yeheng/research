@@ -85,6 +85,7 @@ export interface GraphState {
   session_id: string;
   iteration: number;
   max_iterations: number;
+  confidence_threshold?: number;  // Optional confidence threshold (default: 0.9)
   paths: ResearchPath[];
   confidence: number;
   aggregated: boolean;

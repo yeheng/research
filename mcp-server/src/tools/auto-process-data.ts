@@ -145,6 +145,7 @@ export async function autoProcessDataHandler(input: AutoProcessInput): Promise<a
   const allFacts: any[] = [];
   const allEntities: any[] = [];
   const allCitations: any[] = [];
+  const skippedOperations: string[] = [];
 
   // Process each file
   for (const file of mdFiles) {
@@ -177,13 +178,16 @@ export async function autoProcessDataHandler(input: AutoProcessInput): Promise<a
       }
 
       // Validate citations
-      // NOTE: Citation validation requires pre-extracted citations array.
-      // This feature needs a citation extraction step before validation can work.
-      // For now, we skip citation validation as the validate() function expects
-      // a 'citations' array, not raw text content.
+      // NOTE: Citation validation requires citation extraction implementation first.
+      // This feature is not yet implemented in v4.0.
       if (operations.includes('citation_validation')) {
-        // TODO: Implement citation extraction from text first
-        logger.info('Citation validation skipped - requires citation extraction implementation');
+        const warningMsg = 'Citation validation not yet implemented - requires citation extraction from text';
+        logger.warn(warningMsg, { file });
+
+        // Track skipped operation (only add once)
+        if (!skippedOperations.includes('citation_validation')) {
+          skippedOperations.push('citation_validation');
+        }
       }
 
     } catch (error) {
@@ -257,15 +261,29 @@ export async function autoProcessDataHandler(input: AutoProcessInput): Promise<a
     stats: summary.stats
   });
 
-  return {
+  // Build final response with warnings
+  const response: any = {
     success: true,
     session_id,
     results,
     summary: {
       total_files: mdFiles.length,
-      operations_completed: operations,
+      operations_completed: operations.filter(op => !skippedOperations.includes(op)),
+      operations_skipped: skippedOperations.length > 0 ? skippedOperations : undefined,
       output_directory: outputPath,
       stats: summary.stats
     }
   };
+
+  // Add warnings if any operations were skipped
+  if (skippedOperations.length > 0) {
+    response.warnings = skippedOperations.map(op => {
+      if (op === 'citation_validation') {
+        return 'Citation validation is not yet implemented in v4.0 - requires citation extraction from text first';
+      }
+      return `Operation '${op}' was skipped`;
+    });
+  }
+
+  return response;
 }

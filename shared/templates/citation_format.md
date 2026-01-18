@@ -1,6 +1,18 @@
 # Citation Format Standards
 
-All research outputs must follow these citation standards.
+> **Template Type**: Reference Documentation
+>
+> **Purpose**: This document defines citation standards and quality validation requirements for research outputs.
+>
+> **Usage**: These standards are **guidelines** for agents and researchers to follow when creating citations. While agents should strive to follow these formats, the standards are not programmatically validated. Quality checks should be performed during the research review phase.
+>
+> **Version**: v4.0
+>
+> **Path**: `shared/templates/citation_format.md`
+>
+> ---
+>
+> All research outputs must follow these citation standards.
 
 ## Required Citation Elements
 
