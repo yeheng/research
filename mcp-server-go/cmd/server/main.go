@@ -14,7 +14,18 @@ import (
 
 func main() {
 	dbPath := flag.String("db", "", "Path to SQLite database")
+	logPath := flag.String("log", "mcp-server.log", "Path to log file (default: mcp-server.log in current directory)")
 	flag.Parse()
+
+	// Setup logging
+	logFile, err := os.OpenFile(*logPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error opening log file: %v\n", err)
+		// Proceed without file logging (defaults to stderr, but we want to avoid polluting stdout/stderr if possible)
+	} else {
+		defer logFile.Close()
+		log.SetOutput(logFile)
+	}
 
 	if *dbPath == "" {
 		// Default path
