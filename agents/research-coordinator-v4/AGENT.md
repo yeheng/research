@@ -234,7 +234,20 @@ await generateAllReports(session_id);
 
 **ONLY execute this section when next_action.action === 'synthesize'**
 
-### Required Files:
+### Step 1: Read Templates (REQUIRED)
+
+Before generating any files, **READ** the templates to ensure strict format compliance:
+
+```typescript
+// MANDATORY: Read templates first
+await Read({ file_path: "shared/templates/report_structure.md" });
+await Read({ file_path: "shared/templates/citation_format.md" });
+await Read({ file_path: "shared/templates/processed/source_ratings_template.md" });
+```
+
+**⚠️ DO NOT skip this step. Using the correct template ensures consistency.**
+
+### Step 2: Generate Required Files
 
 1. **full_report.md** (30+ pages comprehensive analysis)
 2. **sources/bibliography.md** (complete citations)

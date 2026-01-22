@@ -403,7 +403,7 @@ RESEARCH/[topic]/
 - ✅ Linear 7-phase workflow
 - ❌ GoT not activated
 
-### v3.1 (Current)
+### v4.0 (Current)
 
 - ✅ Graph of Thoughts architecture
 - ✅ GoT loop: Generate → Execute → Score → Prune → Aggregate

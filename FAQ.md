@@ -81,7 +81,7 @@
 cat RESEARCH/[主题]/progress.md
 
 # 查看活动代理
-sqlite3 .claude/mcp-server/state/research_state.db \
+sqlite3 ~/.claude/mcp-server/research_state.db \
   "SELECT * FROM agents WHERE status='running'"
 ```
 
@@ -166,11 +166,11 @@ sqlite3 .claude/mcp-server/state/research_state.db \
 **解决方案**:
 ```bash
 # 检查锁定进程
-lsof .claude/mcp-server/state/research_state.db
+lsof ~/.claude/mcp-server/research_state.db
 
 # 备份并重建
-cp .claude/mcp-server/state/research_state.db .claude/mcp-server/state/research_state.db.backup
-rm .claude/mcp-server/state/research_state.db
+cp ~/.claude/mcp-server/research_state.db ~/.claude/mcp-server/research_state.db.backup
+rm ~/.claude/mcp-server/research_state.db
 # 系统将自动创建新数据库
 ```
 
@@ -282,7 +282,7 @@ RESEARCH/[主题]/
 rm -rf RESEARCH/[主题]
 
 # 清除数据库
-rm .claude/mcp-server/state/research_state.db
+rm ~/.claude/mcp-server/research_state.db
 # 新数据库将自动创建
 ```
 
@@ -374,7 +374,7 @@ rm .claude/mcp-server/state/research_state.db
 直接查询研究状态：
 
 ```bash
-sqlite3 .claude/mcp-server/state/research_state.db
+sqlite3 ~/.claude/mcp-server/research_state.db
 
 # 查看所有会话
 SELECT * FROM sessions;
@@ -395,7 +395,7 @@ SELECT * FROM activity_log ORDER BY timestamp DESC LIMIT 10;
 cp -r RESEARCH RESEARCH.backup
 
 # 2. 删除数据库
-rm .claude/mcp-server/state/research_state.db
+rm ~/.claude/mcp-server/research_state.db
 
 # 3. 重启 Claude Code
 # 系统将初始化新数据库

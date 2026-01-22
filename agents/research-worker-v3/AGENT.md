@@ -137,4 +137,4 @@ await mcp__deep-research__update_agent_status({
 
 ---
 
-**This agent is deployed by research-coordinator-v4 during Phase 3.**
+**This agent is deployed by research-coordinator-v4 during GoT execute action.**

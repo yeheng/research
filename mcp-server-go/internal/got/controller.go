@@ -54,12 +54,13 @@ func (gc *GraphController) GeneratePaths(query string, options PathGenerationOpt
 
 	generatedPaths := []*ResearchPath{}
 
-	// Select templates (simplified logic)
-	// In a real port, we'd have the full template logic.
+	// Select templates (5 diverse research angles)
 	templates := []struct{ focus, pattern string }{
 		{"Academic Research", "{topic} academic papers research {year}"},
 		{"Industry Practices", "{topic} industry report case study"},
 		{"Policy & Governance", "{topic} policy regulation governance"},
+		{"Technical Documentation", "{topic} technical documentation specification API"},
+		{"News & Media", "{topic} news analysis trends {year}"},
 	}
 
 	for i := 0; i < k; i++ {

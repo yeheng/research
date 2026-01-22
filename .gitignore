@@ -84,3 +84,4 @@ settings*.json
 *.db
 *.db-shm
 *.db-wal
+deep-research-mcp

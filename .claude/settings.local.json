@@ -37,8 +37,26 @@
       "Bash(xargs:*)",
       "mcp__deep-research__register_agent",
       "mcp__deep-research__create_research_session",
-      "mcp__deep-research__update_session_status"
+      "mcp__deep-research__update_session_status",
+      "Skill(deep-research-v4)"
     ]
   },
-  "outputStyle": "Structural Thinking"
+  "outputStyle": "Coding Vibes",
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "model": "claude-opus-4-5-20251101",
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/ccline/ccline",
+    "padding": 0
+  },
+  "enabledPlugins": {
+    "rust-analyzer-lsp@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true,
+    "figma@claude-plugins-official": true,
+    "hookify@claude-plugins-official": true
+  },
+  "feedbackSurveyState": {
+    "lastShownTime": 1754045911646
+  }
 }

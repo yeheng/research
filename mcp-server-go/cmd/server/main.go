@@ -66,6 +66,9 @@ func main() {
 	// State Machine
 	registry.Register("get_next_action", "Get next action", tools.GetNextActionSchema, tools.GetNextActionHandler)
 
+	// Auto Processing (Server-side Phase 4)
+	registry.Register("auto_process_data", "Automatically process raw research data", tools.AutoProcessDataSchema, tools.AutoProcessDataHandler)
+
 	server := mcp.NewServer(registry)
 	if err := server.Serve(); err != nil {
 		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)

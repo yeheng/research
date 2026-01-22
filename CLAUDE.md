@@ -183,7 +183,6 @@ RESEARCH/[topic_name]/
 | Agent | 用途 | 版本 |
 |-------|------|------|
 | `research-coordinator-v4` | 状态机执行器 | v4.0 |
-| `data-processor-v3` | 批量数据处理 | v3.0 |
 | `research-worker-v3` | 研究工作者 | v3.0 |
 
 ### MCP工具 (v4.0)
@@ -194,36 +193,30 @@ RESEARCH/[topic_name]/
 - `validate`: 统一验证工具 (mode: 'citation' | 'source' | 'all')
 - `conflict-detect`: 冲突检测
 
-**高级工具** (1):
-
-- `process_sources`: 组合多操作处理多来源
-
-**批处理工具** (3):
+**批处理工具** (2):
 
 - `batch-extract`: 批量提取 (支持 mode)
 - `batch-validate`: 批量验证 (支持 mode)
-- `batch-conflict-detect`: 批量冲突检测
 
-**GoT 工具** (8):
+**GoT 工具** (4):
 
 - `generate_paths`: 生成研究路径
 - `refine_path`: 优化路径
 - `score_and_prune`: 评分和剪枝
 - `aggregate_paths`: 聚合路径
-- `export_state`, `import_state`: 状态导入导出
-- `export_visualization`: 可视化导出
-- `get_graph_state`: 获取图状态
 
-**v4.0 状态机工具** (2):
+**状态机工具** (1):
 
 - `get_next_action`: 获取下一步指令
-- `ingest_data`: 数据摄取
 
-**状态管理工具** (9):
+**状态管理工具** (5):
 
 - 会话: `create_research_session`, `update_session_status`, `get_session_info`
-- 代理: `register_agent`, `update_agent_status`, `get_active_agents`
-- 日志: `log_activity`, `render_progress`, `auto_process_data`
+- 代理: `register_agent`, `update_agent_status`
+
+**自动处理工具** (1):
+
+- `auto_process_data`: 自动化 Phase 4 数据处理（服务端批处理事实提取、实体提取、引用验证、冲突检测）
 
 ---
 
@@ -312,119 +305,45 @@ RESEARCH/[topic_name]/
 
 ## 🔧 MCP 工具使用示例
 
-### process_sources - 高级组合工具
+### auto_process_data - 自动化数据处理工具
 
-**用途**: 一次性处理多个来源，执行多种操作
+**用途**: 一次性处理研究数据目录，执行多种操作
 
 **支持的操作**:
 
-- `extract_facts` - 提取事实
-- `extract_entities` - 提取实体
-- `validate_citations` - 验证引用
-- `rate_quality` - 评级来源质量
-**基础示例**:
+- `fact_extraction` - 提取事实
+- `entity_extraction` - 提取实体
+- `citation_validation` - 验证引用
+- `conflict_detection` - 冲突检测
+
+**示例**:
 
 ```typescript
-// 处理单个来源
-await mcp__deep-research__process_sources({
-  sources: [
-    {
-      url: "https://example.com/article",
-      content: "研究文本内容...",
-      type: "academic"
-    }
-  ],
-  operations: ["extract_facts", "rate_quality"]
-});
-```
-
-**高级示例 - 批量处理多个来源**:
-
-```typescript
-// 处理多个来源，执行所有操作
-await mcp__deep-research__process_sources({
-  sources: [
-    {
-      url: "https://arxiv.org/paper1",
-      content: "学术论文内容...",
-      type: "academic",
-      metadata: {
-        citations: [
-          { claim: "...", author: "Smith", date: "2024", url: "..." }
-        ]
-      }
-    },
-    {
-      url: "https://techcrunch.com/article",
-      content: "新闻文章内容...",
-      type: "news"
-    },
-    {
-      url: "https://company.com/blog",
-      content: "博客文章内容...",
-      type: "blog"
-    }
-  ],
+// 自动处理研究数据
+await mcp__deep-research__auto_process_data({
+  session_id: "session_123",
+  input_dir: "RESEARCH/topic/data/raw/",
+  output_dir: "RESEARCH/topic/data/processed/",
   operations: [
-    "extract_facts",
-    "extract_entities", 
-    "validate_citations",
-    "rate_quality"
-  ],
-  options: {
-    parallel: true  // 并行处理
-  }
+    "fact_extraction",
+    "entity_extraction",
+    "citation_validation",
+    "conflict_detection"
+  ]
 });
 ```
 
-**输出结果**:
-
-```json
-{
-  "facts": [
-    {
-      "content": "Company X: revenue = $100M",
-      "source": "https://example.com/article",
-      "confidence": 0.9
-    }
-  ],
-  "entities": [
-    {
-      "name": "Company X",
-      "type": "company",
-      "mentions": 5
-    }
-  ],
-  "citations": [
-    {
-      "citation": "https://arxiv.org/paper1",
-      "isValid": true,
-      "issues": []
-    }
-  ],
-  "sourceRatings": [
-    {
-      "url": "https://arxiv.org/paper1",
-      "rating": "A",
-      "reasons": ["Academic domain", "Peer-reviewed"]
-    }
-  ],
-  "summary": "Processed 3 sources: 15 facts, 8 entities, 1 citations validated, 3 sources rated."
-}
-```
+**输出**: 在 `output_dir` 生成处理结果文件：
+- `facts.json` - 提取的事实列表
+- `entities.json` - 提取的实体列表
+- `citations.json` - 引用验证结果
+- `conflicts.json` - 检测到的冲突
 
 **使用场景**:
 
 1. **Phase 4 数据处理**: 批量处理研究 worker 的输出
-2. **来源验证**: 快速评估多个来源的质量
-3. **知识提取**: 从多个文档中提取结构化信息
-4. **引用审核**: 验证报告中的所有引用
-
-**优势**:
-- ✅ 一次调用完成多个操作
-- ✅ 自动处理不同来源类型
-- ✅ 统一的输出格式
-- ✅ 支持并行处理
+2. **知识提取**: 从多个文档中提取结构化信息
+3. **引用审核**: 验证报告中的所有引用
 
 ---
 

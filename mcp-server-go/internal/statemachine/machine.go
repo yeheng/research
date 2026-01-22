@@ -44,7 +44,22 @@ func (sm *ResearchStateMachine) GetNextAction(state got.GraphState) got.NextActi
 		}
 	}
 
-	// Rule 3: If there are pending paths, execute them
+	// Rule 3: If there are running paths, wait for them to complete
+	var runningPaths []string
+	for _, p := range state.Paths {
+		if p.Status == "running" {
+			runningPaths = append(runningPaths, p.ID)
+		}
+	}
+	if len(runningPaths) > 0 {
+		return got.NextAction{
+			Action:    "wait",
+			Params:    map[string]interface{}{"path_ids": runningPaths},
+			Reasoning: fmt.Sprintf("%d paths still running, waiting for completion", len(runningPaths)),
+		}
+	}
+
+	// Rule 4: If there are pending paths, execute them
 	var pendingPaths []string
 	for _, p := range state.Paths {
 		if p.Status == "pending" {
@@ -59,7 +74,7 @@ func (sm *ResearchStateMachine) GetNextAction(state got.GraphState) got.NextActi
 		}
 	}
 
-	// Rule 4: If there are completed but unscored paths, score them
+	// Rule 5: If there are completed but unscored paths, score them
 	var unscoredPaths []string
 	for _, p := range state.Paths {
 		if p.Status == "completed" && p.Score == 0 {
@@ -74,7 +89,7 @@ func (sm *ResearchStateMachine) GetNextAction(state got.GraphState) got.NextActi
 		}
 	}
 
-	// Rule 5: If there are multiple high-quality paths and not yet aggregated, aggregate
+	// Rule 6: If there are multiple high-quality paths and not yet aggregated, aggregate
 	var highQualityPaths []string
 	for _, p := range state.Paths {
 		if p.Score >= 7.0 {
@@ -89,7 +104,7 @@ func (sm *ResearchStateMachine) GetNextAction(state got.GraphState) got.NextActi
 		}
 	}
 
-	// Rule 6: If confidence is still low, generate new paths with refined focus
+	// Rule 7: If confidence is still low, generate new paths with refined focus
 	if state.Confidence < sm.ConfidenceThreshold {
 		return got.NextAction{
 			Action:    "generate",
