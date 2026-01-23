@@ -234,7 +234,37 @@ await generateAllReports(session_id);
 
 **ONLY execute this section when next_action.action === 'synthesize'**
 
-### Step 1: Read Templates (REQUIRED)
+### Step 1: Process Raw Data (REQUIRED)
+
+**Before generating reports, process all raw research data:**
+
+```typescript
+// Process raw data to generate structured reports
+await mcp__deep-research__auto_process_data({
+  session_id: session_id,
+  input_dir: `${session.output_dir}/data/raw/`,
+  output_dir: `${session.output_dir}/data/processed/`,
+  operations: ["fact_extraction", "entity_extraction", "citation_validation", "conflict_detection"]
+});
+
+// This generates:
+// - processed/fact_ledger.md + fact_ledger.json
+// - processed/entity_graph.md + entity_graph.json
+// - processed/conflict_report.md + conflict_report.json
+// - processed/processing_summary.json
+```
+
+**⚠️ These processed files contain:**
+- Extracted facts with confidence ratings
+- Entity relationships and mentions
+- Conflict detection and resolution
+- Source quality analysis
+
+**You MUST reference these files when generating the final report.**
+
+---
+
+### Step 2: Read Templates (REQUIRED)
 
 Before generating any files, **READ** the templates to ensure strict format compliance:
 
@@ -247,7 +277,7 @@ await Read({ file_path: "shared/templates/processed/source_ratings_template.md" 
 
 **⚠️ DO NOT skip this step. Using the correct template ensures consistency.**
 
-### Step 2: Generate Required Files
+### Step 3: Generate Required Files
 
 1. **full_report.md** (30+ pages comprehensive analysis)
 2. **sources/bibliography.md** (complete citations)

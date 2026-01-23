@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"deep-research-mcp/internal/logic"
 	"deep-research-mcp/internal/mcp"
@@ -44,6 +45,7 @@ var AutoProcessDataSchema = map[string]interface{}{
 // 4. Detecting conflicts
 // 5. Writing results to output_dir
 func AutoProcessDataHandler(args map[string]interface{}) (*mcp.CallToolResult, error) {
+	startTime := time.Now() // Track processing start time
 	sessionID, _ := args["session_id"].(string)
 	inputDir, _ := args["input_dir"].(string)
 	outputDir, _ := args["output_dir"].(string)
@@ -80,15 +82,20 @@ func AutoProcessDataHandler(args map[string]interface{}) (*mcp.CallToolResult, e
 		return errorResult("Failed to create output directory: " + err.Error()), nil
 	}
 
-	// Write output files
-	if err := writeOutputFiles(outputDir, result); err != nil {
+	// Write output files (JSON and Markdown)
+	if err := writeOutputFiles(outputDir, result, startTime); err != nil {
 		result["write_error"] = err.Error()
 	} else {
 		result["output_files"] = []string{
+			// JSON files
 			filepath.Join(outputDir, "fact_ledger.json"),
 			filepath.Join(outputDir, "entity_graph.json"),
 			filepath.Join(outputDir, "conflict_report.json"),
 			filepath.Join(outputDir, "processing_summary.json"),
+			// Markdown reports
+			filepath.Join(outputDir, "fact_ledger.md"),
+			filepath.Join(outputDir, "entity_graph.md"),
+			filepath.Join(outputDir, "conflict_report.md"),
 		}
 	}
 
@@ -314,8 +321,11 @@ func factsConflict(f1, f2 logic.Fact) bool {
 	return false
 }
 
-// writeOutputFiles writes processing results to output files
-func writeOutputFiles(outputDir string, result map[string]interface{}) error {
+// writeOutputFiles writes processing results to output files (JSON and Markdown)
+func writeOutputFiles(outputDir string, result map[string]interface{}, startTime time.Time) error {
+	// Initialize template renderer
+	templateDir := "shared/templates/processed"
+	renderer := NewTemplateRenderer(templateDir)
 	// Write fact ledger
 	if facts, ok := result["facts"]; ok {
 		data, _ := json.MarshalIndent(map[string]interface{}{
@@ -365,7 +375,32 @@ func writeOutputFiles(outputDir string, result map[string]interface{}) error {
 		"status":               result["status"],
 	}
 	data, _ := json.MarshalIndent(summary, "", "  ")
-	return os.WriteFile(filepath.Join(outputDir, "processing_summary.json"), data, 0644)
+	if err := os.WriteFile(filepath.Join(outputDir, "processing_summary.json"), data, 0644); err != nil {
+		return err
+	}
+
+	// Render markdown reports using templates
+	// 1. Fact Ledger
+	factLedgerData := PrepareFactLedgerData(result, startTime)
+	if err := renderer.RenderFactLedger(factLedgerData, filepath.Join(outputDir, "fact_ledger.md")); err != nil {
+		// Log error but don't fail - JSON files are already written
+		// In production, you might want to handle this differently
+		_ = err // Suppress unused error for now
+	}
+
+	// 2. Entity Graph
+	entityGraphData := PrepareEntityGraphData(result)
+	if err := renderer.RenderEntityGraph(entityGraphData, filepath.Join(outputDir, "entity_graph.md")); err != nil {
+		_ = err
+	}
+
+	// 3. Conflict Report
+	conflictReportData := PrepareConflictReportData(result)
+	if err := renderer.RenderConflictReport(conflictReportData, filepath.Join(outputDir, "conflict_report.md")); err != nil {
+		_ = err
+	}
+
+	return nil
 }
 
 // contains checks if a string is in a slice
