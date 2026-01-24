@@ -58,7 +58,7 @@ func initSchema(db *sql.DB) error {
 		return err
 	}
 
-	const targetVersion = 2 // Matching TS version
+	const targetVersion = 3 // v4.1: Added state machine persistence fields
 
 	if version < targetVersion {
 		if _, err := db.Exec(schemaSQL); err != nil {

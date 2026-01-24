@@ -126,15 +126,15 @@ Unified error codes across all research skills.
 
 ### Retry Logic
 
-```python
-max_retries = {
-    "E001-E003": 1,  # Input errors - fix once
-    "E101": 1,       # Timeout - retry once
-    "E103": 2,       # Rate limit - retry with backoff
-    "E201": 1,       # Token limit - preprocess once
-    "E202": 2,       # Quality - refine twice
-    "E203": 3,       # Citations - must fix
-    "E301": 1,       # Agent spawn - reduce count
+```go
+var maxRetries = map[string]int{
+    "E001-E003": 1,  // Input errors - fix once
+    "E101":      1,  // Timeout - retry once
+    "E103":      2,  // Rate limit - retry with backoff
+    "E201":      1,  // Token limit - preprocess once
+    "E202":      2,  // Quality - refine twice
+    "E203":      3,  // Citations - must fix
+    "E301":      1,  // Agent spawn - reduce count
 }
 ```
 

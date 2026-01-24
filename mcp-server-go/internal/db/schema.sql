@@ -13,6 +13,16 @@ CREATE TABLE IF NOT EXISTS research_sessions (
     status TEXT DEFAULT 'initializing'
         CHECK (status IN ('initializing', 'planning', 'executing', 'synthesizing', 'validating', 'completed', 'failed')),
     current_phase INTEGER DEFAULT 0,
+    -- v4.1: Added for state machine persistence
+    iteration_count INTEGER DEFAULT 0,
+    confidence REAL DEFAULT 0.0,
+    is_aggregated INTEGER DEFAULT 0,
+    budget_exhausted INTEGER DEFAULT 0,
+    max_iterations INTEGER DEFAULT 10,
+    confidence_threshold REAL DEFAULT 0.9,
+    -- v4.1: Session-level locking for concurrency control
+    locked_at TEXT,
+    locked_by TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     completed_at TEXT,

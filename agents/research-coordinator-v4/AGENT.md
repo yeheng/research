@@ -273,6 +273,7 @@ Before generating any files, **READ** the templates to ensure strict format comp
 await Read({ file_path: "shared/templates/report_structure.md" });
 await Read({ file_path: "shared/templates/citation_format.md" });
 await Read({ file_path: "shared/templates/processed/source_ratings_template.md" });
+await Read({ file_path: "shared/templates/progress_log_template.md" });
 ```
 
 **⚠️ DO NOT skip this step. Using the correct template ensures consistency.**

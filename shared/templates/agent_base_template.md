@@ -102,7 +102,8 @@ All agents should verify:
 
 ## Reference Documents
 
-- Error Codes: `.claude/shared/constants/error_codes.md`
-- Source Ratings: `.claude/shared/constants/source_quality_ratings.md`
-- Token Optimization: `.claude/shared/constants/token_optimization.md`
-- Progress Template: `.claude/shared/templates/progress_log_template.md`
+- Error Codes: `shared/constants/error_codes.md`
+- Source Ratings: `shared/constants/source_quality_ratings.md`
+- Token Optimization: `shared/constants/token_optimization.md`
+- Progress Template: `shared/templates/progress_log_template.md`
+- Question Templates: `shared/templates/question_templates/` (literature_review, competitive_analysis, market_research, technical_comparison)

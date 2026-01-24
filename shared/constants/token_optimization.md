@@ -16,8 +16,8 @@ Use the **Download → Clean → Read** pipeline for all web sources.
 
 ```bash
 # Use WebFetch but immediately save to disk
-WebFetch: https://example.com/article
-↓
+WebFetch: https://www.google.com/search?q=article
+
 Save to: RESEARCH/[topic]/data/raw/source_id.html
 ```
 
@@ -26,8 +26,9 @@ Save to: RESEARCH/[topic]/data/raw/source_id.html
 ### Step 2: Preprocess Document
 
 ```bash
-python3 scripts/preprocess_document.py \
-  RESEARCH/[topic]/data/raw/source_id.html
+deep-research-mcp preprocess \
+  --input RESEARCH/[topic]/data/raw/source_id.html \
+  --output RESEARCH/[topic]/data/processed/
 ```
 
 **Output**:
@@ -93,8 +94,8 @@ Read lines -50--1   # Conclusion
 Before fetching any URL:
 
 ```bash
-python3 scripts/url_manifest.py check \
-  "https://example.com/article" --topic my_topic
+deep-research-mcp url-check \
+  --url "https://example.com/article" --topic my_topic
 ```
 
 If already cached:
@@ -115,12 +116,12 @@ For large knowledge bases:
 
 ```bash
 # Index documents
-python3 scripts/vector_store.py index \
-  RESEARCH/topic/data/processed/*.md
+deep-research-mcp vector-index \
+  --input RESEARCH/topic/data/processed/*.md
 
 # Query instead of reading entire docs
-python3 scripts/vector_store.py query \
-  "market growth rate" --topic topic_name
+deep-research-mcp vector-query \
+  --query "market growth rate" --topic topic_name
 ```
 
 Returns only relevant chunks (~500 tokens vs 50k tokens).
@@ -199,7 +200,7 @@ ls RESEARCH/[topic]/data/processed/
 Read lines 1-20 from each processed file
 
 # 4. Use vector store for queries
-python3 scripts/vector_store.py query "key facts"
+deep-research-mcp vector-query --query "key facts"
 ```
 
 ---

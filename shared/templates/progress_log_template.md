@@ -116,44 +116,51 @@ RESEARCH/[topic]/progress.md
 
 ### 1. Skill Invocation Logging
 
-```python
-def log_skill_call(progress_file, skill_name, status, input_summary, output_summary):
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    entry = f"""
-### [{timestamp}] Skill: {skill_name}
-- **Status**: {status}
-- **Input**: {input_summary}
-- **Output**: {output_summary}
-"""
-    append_to_file(progress_file, entry)
+```go
+func LogSkillCall(progressFile, skillName, status, inputSummary, outputSummary string) {
+    timestamp := time.Now().Format("15:04:05")
+    entry := fmt.Sprintf(`
+### [%s] Skill: %s
+- **Status**: %s
+- **Input**: %s
+- **Output**: %s
+`, timestamp, skillName, status, inputSummary, outputSummary)
+    appendToFile(progressFile, entry)
+}
 ```
 
 ### 2. Agent Deployment Logging
 
-```python
-def log_agent_deployment(progress_file, agent_id, agent_type, focus, status):
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    entry = f"| {agent_id} | {agent_type} | {focus} | {status} | - |\n"
-    append_to_table(progress_file, "Agent Deployments", entry)
+```go
+func LogAgentDeployment(progressFile, agentID, agentType, focus, status string) {
+    timestamp := time.Now().Format("15:04:05")
+    entry := fmt.Sprintf("| %s | %s | %s | %s | - |\n", agentID, agentType, focus, status)
+    appendToTable(progressFile, "Agent Deployments", entry)
+}
 ```
 
 ### 3. MCP Tool Call Logging
 
-```python
-def log_mcp_call(progress_file, tool_name, input_size, output_summary, cached):
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    cached_str = "Yes" if cached else "No"
-    entry = f"| {timestamp} | {tool_name} | {input_size} | {output_summary} | {cached_str} |\n"
-    append_to_table(progress_file, "MCP Tool Calls", entry)
+```go
+func LogMCPCall(progressFile, toolName, inputSize, outputSummary string, cached bool) {
+    timestamp := time.Now().Format("15:04:05")
+    cachedStr := "No"
+    if cached {
+        cachedStr = "Yes"
+    }
+    entry := fmt.Sprintf("| %s | %s | %s | %s | %s |\n", timestamp, toolName, inputSize, outputSummary, cachedStr)
+    appendToTable(progressFile, "MCP Tool Calls", entry)
+}
 ```
 
 ### 4. Error Logging
 
-```python
-def log_error(progress_file, error_code, message, recovery_action):
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    entry = f"| {timestamp} | {error_code} | {message} | {recovery_action} |\n"
-    append_to_table(progress_file, "Error Log", entry)
+```go
+func LogError(progressFile, errorCode, message, recoveryAction string) {
+    timestamp := time.Now().Format("15:04:05")
+    entry := fmt.Sprintf("| %s | %s | %s | %s |\n", timestamp, errorCode, message, recoveryAction)
+    appendToTable(progressFile, "Error Log", entry)
+}
 ```
 
 ## Status Icons

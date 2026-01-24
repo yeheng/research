@@ -18,6 +18,7 @@ type ResearchStep struct {
 	Input      string                 `json:"input,omitempty"`
 	Query      string                 `json:"query,omitempty"`
 	Output     string                 `json:"output,omitempty"`
+	Status     string                 `json:"status,omitempty"` // pending, running, completed, failed
 	Sources    []string               `json:"sources,omitempty"`
 	Facts      []interface{}          `json:"facts,omitempty"`
 	Timestamp  string                 `json:"timestamp"`
@@ -33,14 +34,10 @@ type PathGenerationOptions struct {
 }
 
 type PathScore struct {
-	PathID    string  `json:"path_id"`
-	Score     float64 `json:"score"`
-	Kept      bool    `json:"kept"`
-	Breakdown *struct {
-		Steps     float64 `json:"steps,omitempty"`
-		Outputs   float64 `json:"outputs,omitempty"`
-		Relevance float64 `json:"relevance,omitempty"`
-	} `json:"breakdown,omitempty"`
+	PathID    string             `json:"path_id"`
+	Score     float64            `json:"score"`
+	Kept      bool               `json:"kept"`
+	Breakdown map[string]float64 `json:"breakdown,omitempty"`
 }
 
 type AggregationResult struct {

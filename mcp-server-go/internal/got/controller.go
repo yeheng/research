@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"deep-research-mcp/internal/db"
+	researcherrors "deep-research-mcp/internal/errors"
 )
 
 type GraphController struct {
@@ -18,6 +19,7 @@ type GraphController struct {
 	PathCounter int
 	History     []HistoryEntry
 	DB          *sql.DB
+	logger      *researcherrors.ErrorLogger
 }
 
 type HistoryEntry struct {
@@ -38,6 +40,7 @@ func NewGraphController(sessionID string) *GraphController {
 	} else {
 		gc.LoadState(sessionID)
 	}
+	gc.logger = researcherrors.NewErrorLogger(gc.SessionID)
 	return gc
 }
 
@@ -146,22 +149,20 @@ func (gc *GraphController) RefinePath(pathID string, feedback string, depth int)
 	return path, nil
 }
 
-// ScoreAndPrune scores paths and keeps top N
+// ScoreAndPrune scores paths using enhanced algorithm and keeps top N
 func (gc *GraphController) ScoreAndPrune(paths []*ResearchPath, keepN int) ([]PathScore, error) {
 	var scoredPaths []PathScore
 
 	for _, p := range paths {
-		// Simplified scoring logic
-		score := 5.0 + float64(len(p.Steps))
-		if score > 10.0 {
-			score = 10.0
-		}
+		// Enhanced scoring algorithm
+		score := gc.calculateEnhancedScore(p)
 		p.Score = score
 
 		scoredPaths = append(scoredPaths, PathScore{
-			PathID: p.ID,
-			Score:  score,
-			Kept:   true,
+			PathID:     p.ID,
+			Score:      score,
+			Kept:       true,
+			Breakdown:  gc.getScoreBreakdown(p),
 		})
 	}
 
@@ -181,6 +182,220 @@ func (gc *GraphController) ScoreAndPrune(paths []*ResearchPath, keepN int) ([]Pa
 
 	gc.saveOperationToDb("Score", getPathIDs(paths), getPathIDsFromScore(scoredPaths[:min(len(scoredPaths), keepN)]))
 	return scoredPaths, nil
+}
+
+// calculateEnhancedScore computes a comprehensive score for a research path
+// Score is 0-10 based on multiple factors:
+// - Citation density (25%)
+// - Source quality (25%)
+// - Content coverage/depth (25%)
+// - Step completeness (25%)
+func (gc *GraphController) calculateEnhancedScore(p *ResearchPath) float64 {
+	// Base score starts at 5.0
+	baseScore := 5.0
+
+	// Factor 1: Citation density (0-2.5 points)
+	citationScore := gc.scoreCitationDensity(p)
+
+	// Factor 2: Source quality (0-2.5 points)
+	sourceScore := gc.scoreSourceQuality(p)
+
+	// Factor 3: Content coverage/depth (0-2.5 points)
+	coverageScore := gc.scoreCoverage(p)
+
+	// Factor 4: Step completeness (0-2.5 points)
+	completenessScore := gc.scoreCompleteness(p)
+
+	totalScore := baseScore + citationScore + sourceScore + coverageScore + completenessScore
+
+	// Cap at 10.0
+	if totalScore > 10.0 {
+		totalScore = 10.0
+	}
+	if totalScore < 0 {
+		totalScore = 0
+	}
+
+	return totalScore
+}
+
+// scoreCitationDensity evaluates citation/reference density in the path
+func (gc *GraphController) scoreCitationDensity(p *ResearchPath) float64 {
+	citationCount := 0
+	totalLength := 0
+
+	for _, step := range p.Steps {
+		output := step.Output
+		totalLength += len(output)
+
+		// Count citations (URLs, [N] references, DOIs)
+		citationCount += strings.Count(output, "http://")
+		citationCount += strings.Count(output, "https://")
+		citationCount += strings.Count(output, "doi:")
+		citationCount += strings.Count(output, "DOI:")
+		// Count reference markers like [1], [2], etc.
+		for i := 1; i <= 20; i++ {
+			citationCount += strings.Count(output, fmt.Sprintf("[%d]", i))
+		}
+	}
+
+	// Calculate density per 1000 characters
+	if totalLength == 0 {
+		return 0.5 // Default if no content
+	}
+
+	density := float64(citationCount) / (float64(totalLength) / 1000.0)
+
+	// Score: 0 citations = 0, 1+ per 1k chars = 2.5
+	score := density * 1.25
+	if score > 2.5 {
+		score = 2.5
+	}
+
+	return score
+}
+
+// scoreSourceQuality evaluates the quality of sources mentioned
+func (gc *GraphController) scoreSourceQuality(p *ResearchPath) float64 {
+	totalContent := ""
+	for _, step := range p.Steps {
+		totalContent += step.Output + " "
+	}
+
+	if len(totalContent) == 0 {
+		return 0.5
+	}
+
+	lowerContent := strings.ToLower(totalContent)
+
+	// High quality indicators (academic, official)
+	highQualityScore := 0.0
+	highQualityIndicators := []string{
+		".edu", ".gov", "pubmed", "arxiv", "scholar.google",
+		"ieee", "acm.org", "nature.com", "science.org",
+		"peer-reviewed", "systematic review", "meta-analysis",
+	}
+	for _, indicator := range highQualityIndicators {
+		if strings.Contains(lowerContent, indicator) {
+			highQualityScore += 0.3
+		}
+	}
+
+	// Medium quality indicators (industry reports, reputable news)
+	mediumQualityIndicators := []string{
+		"gartner", "forrester", "mckinsey", "reuters", "bloomberg",
+		"techcrunch", "wired", "official documentation",
+	}
+	for _, indicator := range mediumQualityIndicators {
+		if strings.Contains(lowerContent, indicator) {
+			highQualityScore += 0.15
+		}
+	}
+
+	// Low quality penalties
+	lowQualityIndicators := []string{
+		"reddit.com", "quora.com", "blog", "medium.com",
+		"opinion", "allegedly", "rumor",
+	}
+	for _, indicator := range lowQualityIndicators {
+		if strings.Contains(lowerContent, indicator) {
+			highQualityScore -= 0.1
+		}
+	}
+
+	// Normalize to 0-2.5
+	score := highQualityScore
+	if score > 2.5 {
+		score = 2.5
+	}
+	if score < 0 {
+		score = 0
+	}
+
+	return score
+}
+
+// scoreCoverage evaluates content depth and breadth
+func (gc *GraphController) scoreCoverage(p *ResearchPath) float64 {
+	totalContent := ""
+	topicsCovered := make(map[string]bool)
+
+	for _, step := range p.Steps {
+		totalContent += step.Output + " "
+
+		// Track topics covered
+		if step.Query != "" {
+			topicsCovered[step.Query] = true
+		}
+	}
+
+	contentLength := len(totalContent)
+	topicCount := len(topicsCovered)
+	stepCount := len(p.Steps)
+
+	// Score based on content length (up to 1.0)
+	lengthScore := float64(contentLength) / 5000.0
+	if lengthScore > 1.0 {
+		lengthScore = 1.0
+	}
+
+	// Score based on topics covered (up to 0.75)
+	topicScore := float64(topicCount) * 0.25
+	if topicScore > 0.75 {
+		topicScore = 0.75
+	}
+
+	// Score based on depth (steps) (up to 0.75)
+	depthScore := float64(stepCount) * 0.15
+	if depthScore > 0.75 {
+		depthScore = 0.75
+	}
+
+	return lengthScore + topicScore + depthScore
+}
+
+// scoreCompleteness evaluates how well each step was completed
+func (gc *GraphController) scoreCompleteness(p *ResearchPath) float64 {
+	if len(p.Steps) == 0 {
+		return 0
+	}
+
+	completedSteps := 0
+	stepsWithOutput := 0
+
+	for _, step := range p.Steps {
+		// Check if step has output
+		if step.Output != "" && len(step.Output) > 50 {
+			stepsWithOutput++
+		}
+		// Check if step is marked completed
+		if step.Status == "completed" || step.Output != "" {
+			completedSteps++
+		}
+	}
+
+	// Calculate completion ratio
+	completionRatio := float64(completedSteps) / float64(len(p.Steps))
+	outputRatio := float64(stepsWithOutput) / float64(len(p.Steps))
+
+	// Combined score (0-2.5)
+	score := (completionRatio + outputRatio) * 1.25
+
+	if score > 2.5 {
+		score = 2.5
+	}
+
+	return score
+}
+
+// getScoreBreakdown returns a breakdown of score components
+func (gc *GraphController) getScoreBreakdown(p *ResearchPath) map[string]float64 {
+	return map[string]float64{
+		"citation_density": gc.scoreCitationDensity(p),
+		"source_quality":   gc.scoreSourceQuality(p),
+		"coverage":         gc.scoreCoverage(p),
+		"completeness":     gc.scoreCompleteness(p),
+	}
 }
 
 // AggregatePaths aggregates paths
@@ -243,7 +458,9 @@ func (gc *GraphController) LoadState(sessionID string) {
 		ORDER BY created_at ASC
 	`, sessionID)
 	if err != nil {
-		fmt.Printf("Error loading nodes: %v\n", err)
+		if gc.logger != nil {
+			gc.logger.LogError(researcherrors.WrapError(err, researcherrors.ErrDatabaseOperation, "Failed to load GoT nodes"))
+		}
 		return
 	}
 	defer rows.Close()
@@ -261,7 +478,7 @@ func (gc *GraphController) LoadState(sessionID string) {
 	}
 }
 
-func (gc *GraphController) saveNodeToDb(path *ResearchPath, nodeType string) {
+func (gc *GraphController) saveNodeToDb(path *ResearchPath, nodeType string) error {
 	content, _ := json.Marshal(path)
 	summary := fmt.Sprintf("%s: %s", path.Focus, path.Query)
 	depth := 0
@@ -277,11 +494,16 @@ func (gc *GraphController) saveNodeToDb(path *ResearchPath, nodeType string) {
 	`, path.ID, gc.SessionID, nil, nodeType, string(content), summary, path.Score, path.Status, depth)
 
 	if err != nil {
-		fmt.Printf("Error saving node: %v\n", err)
+		resErr := researcherrors.WrapError(err, researcherrors.ErrDatabaseOperation, "Failed to save GoT node")
+		if gc.logger != nil {
+			gc.logger.LogError(resErr)
+		}
+		return resErr
 	}
+	return nil
 }
 
-func (gc *GraphController) saveOperationToDb(opType string, inputNodes, outputNodes []string) {
+func (gc *GraphController) saveOperationToDb(opType string, inputNodes, outputNodes []string) error {
 	inputJson, _ := json.Marshal(inputNodes)
 	outputJson, _ := json.Marshal(outputNodes)
 	opID := fmt.Sprintf("op_%d_%d", time.Now().UnixMilli(), rand.Intn(1000))
@@ -294,8 +516,13 @@ func (gc *GraphController) saveOperationToDb(opType string, inputNodes, outputNo
 	`, opID, gc.SessionID, opType, string(inputJson), string(outputJson))
 
 	if err != nil {
-		fmt.Printf("Error saving op: %v\n", err)
+		resErr := researcherrors.WrapError(err, researcherrors.ErrDatabaseOperation, "Failed to save GoT operation")
+		if gc.logger != nil {
+			gc.logger.LogError(resErr)
+		}
+		return resErr
 	}
+	return nil
 }
 
 func (gc *GraphController) logHistory(action string, result interface{}) {
@@ -306,6 +533,14 @@ func (gc *GraphController) logHistory(action string, result interface{}) {
 		Timestamp: time.Now().Format(time.RFC3339),
 	}
 	gc.History = append(gc.History, entry)
+
+	// Log info using structured logger
+	if gc.logger != nil {
+		gc.logger.LogInfo("GoT: "+action, map[string]interface{}{
+			"iteration": entry.Iteration,
+			"result":    result,
+		})
+	}
 
 	// Save to DB log
 	details, _ := json.Marshal(result)

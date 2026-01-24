@@ -170,17 +170,23 @@ if (existingResearch.includes(topic)) {
 
 ### Step 2: Progressive Questioning (Deep mode only)
 
-For deep research, ask clarifying questions:
+For deep research, ask clarifying questions and load appropriate question templates:
+
+**Question Templates** (load based on research type):
+- `shared/templates/question_templates/literature_review.md` - Academic research, systematic reviews
+- `shared/templates/question_templates/competitive_analysis.md` - Competitor analysis, market positioning
+- `shared/templates/question_templates/market_research.md` - Market size, trends, forecasting
+- `shared/templates/question_templates/technical_comparison.md` - Technology comparisons, tool evaluations
 
 **Question 1 - Research Type**:
 
 ```
 "What type of research do you need?"
 - Exploratory: Broad overview
-- Comparative: Compare options/approaches
+- Comparative: Compare options/approaches → Use competitive_analysis.md or technical_comparison.md
 - Problem-Solving: Find solutions
-- Forecasting: Predict trends
-- Deep-Dive: Comprehensive analysis
+- Forecasting: Predict trends → Use market_research.md
+- Deep-Dive: Comprehensive analysis → Use literature_review.md
 ```
 
 **Question 2 - Specific Focus**:
@@ -460,4 +466,4 @@ RESEARCH/[topic]/
 
 ---
 
-**Begin v3.1 Graph of Thoughts research workflow.**
+**Begin v4.0 Graph of Thoughts research workflow.**

@@ -101,17 +101,89 @@ func ValidateHandler(args map[string]interface{}) (*mcp.CallToolResult, error) {
 	}, nil
 }
 
-// ConflictDetectHandler detects conflicts
+// ConflictDetectHandler detects conflicts between facts
 func ConflictDetectHandler(args map[string]interface{}) (*mcp.CallToolResult, error) {
-	// Not fully implemented logic in logic package yet, placeholder
-	// Assuming conflict detection logic exists or will be added.
-	// For now, return empty result or mock.
-	// The TS logic was in graph-controller but not exposed as standalone logic function easily.
-	// I'll skip implementing complex conflict logic here to save time, as it was part of GoT controller.
-	// Or I can return empty.
+	factsRaw, ok := args["facts"].([]interface{})
+	if !ok || len(factsRaw) == 0 {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{{Type: "text", Text: `{"conflicts": [], "fact_count": 0}`}},
+		}, nil
+	}
+
+	// Parse tolerance settings
+	tolerance := logic.DefaultTolerance()
+	if toleranceRaw, ok := args["tolerance"].(map[string]interface{}); ok {
+		if numTol, ok := toleranceRaw["numeric_tolerance"].(float64); ok {
+			tolerance.NumericTolerance = numTol
+		}
+		if dateTol, ok := toleranceRaw["date_tolerance_days"].(float64); ok {
+			tolerance.DateToleranceDays = int(dateTol)
+		}
+		if ignoreLow, ok := toleranceRaw["ignore_low_confidence"].(bool); ok {
+			tolerance.IgnoreLowConfidence = ignoreLow
+		}
+	}
+
+	// Convert facts from interface{} to logic.Fact
+	var facts []logic.Fact
+	for _, fRaw := range factsRaw {
+		fMap, ok := fRaw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		fact := logic.Fact{
+			Entity:     getString(fMap, "entity"),
+			Attribute:  getString(fMap, "attribute"),
+			Value:      getString(fMap, "value"),
+			ValueType:  getString(fMap, "value_type"),
+			Confidence: getString(fMap, "confidence"),
+		}
+
+		// Parse source if present
+		if sourceRaw, ok := fMap["source"].(map[string]interface{}); ok {
+			fact.Source = logic.Source{
+				URL:     getString(sourceRaw, "url"),
+				Title:   getString(sourceRaw, "title"),
+				Author:  getString(sourceRaw, "author"),
+				Date:    getString(sourceRaw, "date"),
+				Quality: getString(sourceRaw, "quality"),
+			}
+		}
+
+		facts = append(facts, fact)
+	}
+
+	// Detect conflicts
+	conflicts := logic.DetectConflicts(facts, tolerance)
+
+	// Build result
+	result := map[string]interface{}{
+		"conflicts":      conflicts,
+		"conflict_count": len(conflicts),
+		"fact_count":     len(facts),
+		"severity_breakdown": map[string]int{
+			"high":   countBySeverity(conflicts, "high"),
+			"medium": countBySeverity(conflicts, "medium"),
+			"low":    countBySeverity(conflicts, "low"),
+		},
+	}
+
+	raw, _ := json.Marshal(result)
 	return &mcp.CallToolResult{
-		Content: []mcp.Content{{Type: "text", Text: `{"conflicts": []}`}},
+		Content: []mcp.Content{{Type: "text", Text: string(raw)}},
 	}, nil
+}
+
+// countBySeverity counts conflicts by severity
+func countBySeverity(conflicts []logic.Conflict, severity string) int {
+	count := 0
+	for _, c := range conflicts {
+		if string(c.Severity) == severity {
+			count++
+		}
+	}
+	return count
 }
 
 func getString(m map[string]interface{}, k string) string {
