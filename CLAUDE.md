@@ -218,6 +218,15 @@ RESEARCH/[topic_name]/
 
 - `auto_process_data`: 自动化 Phase 4 数据处理（服务端批处理事实提取、实体提取、引用验证、冲突检测）
 
+**内容摄取工具** (2):
+
+- `ingest_content`: 将 Web Search 结果写入 raw/ 目录（支持 HTML/Markdown/Text 自动检测、去重）
+- `batch_ingest`: 批量摄取多个内容项
+
+**Raw 数据处理工具** (1):
+
+- `process_raw`: 处理 raw/ 文件，提取关键信息到 processed/（摘要、关键词、事实、实体）
+
 ---
 
 ## 🔧 关键约束
@@ -344,6 +353,75 @@ await mcp__deep-research__auto_process_data({
 1. **Phase 4 数据处理**: 批量处理研究 worker 的输出
 2. **知识提取**: 从多个文档中提取结构化信息
 3. **引用审核**: 验证报告中的所有引用
+
+### ingest_content - 内容摄取工具
+
+**用途**: 将 Web Search/Fetch 结果写入 raw/ 目录，支持自动内容类型检测和去重
+
+**示例**:
+
+```typescript
+// 摄取 HTML 内容
+await mcp__deep-research__ingest_content({
+  session_id: "session_123",
+  url: "https://example.com/article",
+  content: "<html>...",  // 原始 HTML
+  content_type: "html",  // 可选，自动检测
+  output_dir: "RESEARCH/topic/data/raw/",
+  deduplicate: true  // 自动去重
+});
+
+// 批量摄取多个来源
+await mcp__deep-research__batch_ingest({
+  session_id: "session_123",
+  items: [
+    { url: "https://source1.com", content: "..." },
+    { url: "https://source2.com", content: "..." }
+  ],
+  output_dir: "RESEARCH/topic/data/raw/"
+});
+```
+
+**输出**: 在 raw/ 目录生成带 frontmatter 的 Markdown 文件
+
+### process_raw - Raw 数据处理工具
+
+**用途**: 处理 raw/ 文件，提取关键信息到 processed/（TF-IDF 关键段落、关键词、事实、实体）
+
+**示例**:
+
+```typescript
+// 处理整个 raw 目录
+await mcp__deep-research__process_raw({
+  session_id: "session_123",
+  input_path: "RESEARCH/topic/data/raw/",
+  output_dir: "RESEARCH/topic/data/processed/",
+  operations: ["summarize", "extract_facts", "extract_entities", "extract_keywords"],
+  options: {
+    max_paragraphs: 10,  // 最多提取 10 个关键段落
+    max_tokens: 2000     // 摘要最多 2000 tokens
+  }
+});
+```
+
+**输出**:
+- `*_summary.md` - 每个源文件的摘要版本（关键段落 + 关键词 + 事实 + 实体）
+- `sources_index.json` - 所有来源的索引
+- `sources_index.md` - Markdown 格式的来源索引
+
+**数据流水线**:
+
+```
+Web Search → ingest_content → raw/
+                                ↓
+                          process_raw
+                                ↓
+                           processed/
+                                ↓
+                       auto_process_data
+                                ↓
+                     事实/实体/冲突 报告
+```
 
 ---
 

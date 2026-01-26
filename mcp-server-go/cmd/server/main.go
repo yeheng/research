@@ -69,6 +69,13 @@ func main() {
 	// Auto Processing (Server-side Phase 4)
 	registry.Register("auto_process_data", "Automatically process raw research data", tools.AutoProcessDataSchema, tools.AutoProcessDataHandler)
 
+	// Content Ingestion (Web Search → Raw)
+	registry.Register("ingest_content", "Ingest web content into raw directory", tools.IngestContentSchema, tools.IngestContentHandler)
+	registry.Register("batch_ingest", "Batch ingest multiple content items", tools.BatchIngestSchema, tools.BatchIngestHandler)
+
+	// Raw Processing (Raw → Processed)
+	registry.Register("process_raw", "Process raw files and extract key information", tools.ProcessRawSchema, tools.ProcessRawHandler)
+
 	server := mcp.NewServer(registry)
 	if err := server.Serve(); err != nil {
 		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
