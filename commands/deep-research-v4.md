@@ -333,26 +333,35 @@ Output: RESEARCH/${sanitizedTopic}/
 
 ```
 RESEARCH/[topic]/
-├── README.md                    # Overview and navigation
-├── executive_summary.md         # 1-2 page summary
-├── full_report.md               # Complete report (20-50 pages)
+├── README.md                         # Overview and navigation
+├── executive_summary.md              # 1-2 page summary
+├── full_report.md                    # Complete report (20-50 pages)
 ├── data/
-│   ├── raw/                     # Original agent outputs
-│   ├── processed/               # Auto-extracted facts/entities
-│   ├── got_graph.json           # GoT path state (NEW)
-│   └── statistics.md            # Key numbers and metrics
+│   ├── raw/                          # Original agent outputs
+│   │   └── [path-id].md              # Individual research path results
+│   ├── processed/                    # Auto-extracted facts/entities
+│   │   ├── fact_ledger.md/.json      # Extracted facts with confidence
+│   │   ├── entity_graph.md/.json     # Entity relationships
+│   │   ├── conflict_report.md/.json  # Detected contradictions
+│   │   └── processing_summary.json   # Processing metadata
+│   ├── statistics.md                 # Key numbers and metrics
+│   └── key_facts.md                  # Extracted key facts summary
 ├── sources/
-│   ├── bibliography.md          # Complete citations
-│   ├── source_quality_table.md  # A-E quality ratings
-│   └── citation_validation.md   # Validation report
+│   ├── bibliography.md               # Complete citations
+│   ├── source_quality_table.md       # A-E quality ratings
+│   └── citation_validation.md        # Citation validation report
 ├── research_notes/
-│   ├── refined_question.md      # Phase 1 output
-│   ├── research_plan.md         # Phase 2 output
-│   └── agent_status.json        # Execution metadata
+│   ├── refined_question.md           # Phase 1 output
+│   ├── research_plan.md              # Phase 2 output
+│   ├── agent_findings_summary.md     # Raw agent outputs consolidated
+│   ├── agent_status.json             # Execution metadata
+│   └── got_graph_state.md            # GoT graph state export
+├── visuals/
+│   └── descriptions.md               # Visual asset descriptions
 └── appendices/
-    ├── methodology.md           # Research methodology
-    ├── limitations.md           # Known limitations
-    └── progress.md              # Rendered progress log
+    ├── methodology.md                # Research methodology
+    ├── limitations.md                # Known limitations
+    └── progress.md                   # Rendered progress log
 ```
 
 ---

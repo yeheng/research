@@ -278,13 +278,304 @@ await Read({ file_path: "shared/templates/progress_log_template.md" });
 
 **⚠️ DO NOT skip this step. Using the correct template ensures consistency.**
 
-### Step 3: Generate Required Files
+### Step 3: Export GoT State (REQUIRED)
 
-1. **full_report.md** (30+ pages comprehensive analysis)
-2. **sources/bibliography.md** (complete citations)
-3. **sources/source_quality_table.md** (A-E ratings)
-4. **data/statistics.md** (key metrics)
-5. **appendices/methodology.md** (research methods)
+**Export the Graph of Thoughts state for transparency:**
+
+```typescript
+// Export GoT graph state
+const graphState = await mcp__deep-research__get_graph_state({ session_id });
+
+// Create research_notes directory and save state
+await Write({
+  file_path: `${session.output_dir}/research_notes/got_graph_state.md`,
+  content: `# GoT Graph State Export
+
+**Session ID**: ${session_id}
+**Export Time**: ${new Date().toISOString()}
+
+## Graph Statistics
+- Total Nodes: ${graphState.nodes?.length || 0}
+- Total Edges: ${graphState.edges?.length || 0}
+- Best Path Score: ${graphState.best_score || 'N/A'}
+
+## Node Details
+${JSON.stringify(graphState.nodes, null, 2)}
+
+## Edge Details
+${JSON.stringify(graphState.edges, null, 2)}
+`
+});
+
+// Save agent execution metadata
+await Write({
+  file_path: `${session.output_dir}/research_notes/agent_status.json`,
+  content: JSON.stringify({
+    session_id,
+    completed_at: new Date().toISOString(),
+    agents: await mcp__deep-research__get_active_agents({ session_id })
+  }, null, 2)
+});
+```
+
+---
+
+### Step 4: Generate ALL Required Files
+
+**⚠️ CRITICAL: You MUST generate ALL files listed below. Missing files = incomplete research.**
+
+**A. Core Reports (Mandatory)**
+
+```typescript
+// 1. Executive Summary (1-2 pages)
+await Write({
+  file_path: `${session.output_dir}/executive_summary.md`,
+  content: generateExecutiveSummary(processedData, graphState)
+});
+
+// 2. Full Report (30+ pages comprehensive analysis)
+await Write({
+  file_path: `${session.output_dir}/full_report.md`,
+  content: generateFullReport(processedData, graphState)
+});
+```
+
+**B. Research Notes Directory (NEW - REQUIRED)**
+
+```typescript
+// 3. Refined Question (Phase 1 output)
+await Write({
+  file_path: `${session.output_dir}/research_notes/refined_question.md`,
+  content: `# Refined Research Question
+
+## Original Question
+${session.topic}
+
+## Refined Question
+${session.refined_question || session.topic}
+
+## Research Type
+${session.research_type}
+
+## Focus Areas
+${session.focus_areas?.join('\\n- ') || 'General'}
+`
+});
+
+// 4. Research Plan (Phase 2 output)
+await Write({
+  file_path: `${session.output_dir}/research_notes/research_plan.md`,
+  content: generateResearchPlan(session)
+});
+
+// 5. Agent Findings Summary (Raw agent outputs consolidated)
+const agentFindings = await mcp__deep-research__get_active_agents({ session_id });
+await Write({
+  file_path: `${session.output_dir}/research_notes/agent_findings_summary.md`,
+  content: `# Agent Findings Summary
+
+## Overview
+This document consolidates the raw outputs from all research agents deployed during this session.
+
+## Agents Deployed
+${agentFindings.map(a => `- **${a.agent_id}**: ${a.focus_description} (Status: ${a.status})`).join('\n')}
+
+## Raw Findings by Agent
+
+${agentFindings.map(a => `### ${a.agent_id}
+- **Focus**: ${a.focus_description}
+- **Output File**: [${a.output_file}](${a.output_file})
+- **Completion Time**: ${a.completed_at || 'N/A'}
+`).join('\n')}
+
+## Summary Statistics
+- Total Agents: ${agentFindings.length}
+- Completed: ${agentFindings.filter(a => a.status === 'completed').length}
+- Failed: ${agentFindings.filter(a => a.status === 'failed').length}
+`
+});
+
+// 6. GoT State - already generated in Step 3
+// 7. Agent Status - already generated in Step 3
+```
+
+**C. Data Files**
+
+```typescript
+// 7. Statistics (Key metrics extracted from research)
+await Write({
+  file_path: `${session.output_dir}/data/statistics.md`,
+  content: `# Research Statistics
+
+## Data Collection Metrics
+- **Total Sources Processed**: ${processedData.file_count}
+- **Facts Extracted**: ${processedData.fact_count}
+- **Entities Identified**: ${processedData.entity_count}
+- **Conflicts Detected**: ${processedData.conflict_count}
+
+## Source Quality Distribution
+| Rating | Count | Percentage |
+|--------|-------|------------|
+| A | ${countByRating('A')} | ${percentByRating('A')}% |
+| B | ${countByRating('B')} | ${percentByRating('B')}% |
+| C | ${countByRating('C')} | ${percentByRating('C')}% |
+| D | ${countByRating('D')} | ${percentByRating('D')}% |
+| E | ${countByRating('E')} | ${percentByRating('E')}% |
+
+## Key Numbers from Research
+[Extract important numerical findings from processed data]
+`
+});
+
+// 8. Key Facts (Extracted facts summary)
+await Write({
+  file_path: `${session.output_dir}/data/key_facts.md`,
+  content: `# Key Facts Extracted
+
+## Overview
+This document contains the most important facts extracted from research sources.
+
+## High-Confidence Facts (≥0.8)
+${processedData.facts?.filter(f => f.confidence >= 0.8).map(f => `- ${f.text} (Source: ${f.source})`).join('\n') || 'No high-confidence facts extracted.'}
+
+## Medium-Confidence Facts (0.5-0.8)
+${processedData.facts?.filter(f => f.confidence >= 0.5 && f.confidence < 0.8).map(f => `- ${f.text} (Source: ${f.source})`).join('\n') || 'No medium-confidence facts extracted.'}
+
+## Facts Summary
+- Total Facts: ${processedData.fact_count}
+- Average Confidence: ${processedData.avg_confidence || 'N/A'}
+`
+});
+```
+
+**D. Sources Directory**
+
+```typescript
+// 8. Bibliography (Complete citations)
+await Write({
+  file_path: `${session.output_dir}/sources/bibliography.md`,
+  content: generateBibliography(sources)
+});
+
+// 9. Source Quality Table (A-E ratings)
+await Write({
+  file_path: `${session.output_dir}/sources/source_quality_table.md`,
+  content: generateSourceQualityTable(sources)
+});
+
+// 10. Citation Validation Report (NEW - REQUIRED)
+await Write({
+  file_path: `${session.output_dir}/sources/citation_validation.md`,
+  content: `# Citation Validation Report
+
+## Summary
+- **Total Citations**: ${processedData.citation_count || 0}
+- **Valid Citations**: ${processedData.valid_citations || 0}
+- **Issues Found**: ${processedData.citation_issue_count || 0}
+
+## Validation Results
+
+### ✅ Valid Citations
+[List of citations that passed validation]
+
+### ⚠️ Citations with Issues
+[List of citations with problems - missing URL, broken link, etc.]
+
+## Recommendations
+[Suggestions for fixing citation issues]
+`
+});
+```
+
+**E. Appendices**
+
+```typescript
+// 11. Methodology
+await Write({
+  file_path: `${session.output_dir}/appendices/methodology.md`,
+  content: generateMethodology(session)
+});
+
+// 12. Limitations
+await Write({
+  file_path: `${session.output_dir}/appendices/limitations.md`,
+  content: generateLimitations(session, processedData)
+});
+```
+
+**F. Visuals Directory (Create placeholder if no visuals)**
+
+```typescript
+// 13. Visuals descriptions
+await Write({
+  file_path: `${session.output_dir}/visuals/descriptions.md`,
+  content: `# Visual Assets
+
+## Overview
+This directory contains visual assets generated during the research.
+
+## Available Visuals
+${hasVisuals ? visualsList : 'No visual assets were generated for this research.'}
+
+## Usage Notes
+- All images are in PNG format
+- Diagrams can be regenerated from Mermaid source in full_report.md
+`
+});
+```
+
+---
+
+### Step 5: Update README.md
+
+```typescript
+// Ensure README.md has correct links to all generated files
+await Write({
+  file_path: `${session.output_dir}/README.md`,
+  content: generateReadme(session)
+});
+```
+
+---
+
+### Step 6: Final Validation
+
+```typescript
+// Verify all required files exist
+const requiredFiles = [
+  'README.md',
+  'executive_summary.md',
+  'full_report.md',
+  'data/statistics.md',
+  'data/key_facts.md',
+  'sources/bibliography.md',
+  'sources/source_quality_table.md',
+  'sources/citation_validation.md',
+  'research_notes/refined_question.md',
+  'research_notes/research_plan.md',
+  'research_notes/agent_findings_summary.md',
+  'research_notes/got_graph_state.md',
+  'research_notes/agent_status.json',
+  'appendices/methodology.md',
+  'appendices/limitations.md',
+  'visuals/descriptions.md'
+];
+
+for (const file of requiredFiles) {
+  const exists = await checkFileExists(`${session.output_dir}/${file}`);
+  if (!exists) {
+    console.warn(`⚠️ Missing required file: ${file}`);
+  }
+}
+
+TodoWrite({
+  todos: [
+    ...,
+    { content: "Generate all required files", status: "completed" },
+    { content: "Validate output completeness", status: "completed" }
+  ]
+});
+```
 
 **DO NOT** generate these files before receiving `synthesize` action!
 
